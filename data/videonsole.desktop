@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Videos
+GenericName=Video Player
+Comment=Watch your films with a controller
+Exec=videonsole %f
+Icon=videonsole
+Terminal=false
+Categories=AudioVideo;Video;Player;
+MimeType=video/mp4;video/x-m4v;video/x-matroska;video/webm;video/x-msvideo;video/quicktime;video/x-ms-wmv;video/x-flv;video/mpeg;video/ogg;video/3gpp;video/mp2t;application/vnd.rn-realmedia-vbr;
+Keywords=video;videos;film;films;movie;movies;player;watch;cinema;lxb;
+StartupNotify=true
+StartupWMClass=videonsole
+X-GNOME-SingleWindow=true

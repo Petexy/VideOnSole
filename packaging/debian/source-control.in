@@ -1,0 +1,21 @@
+Source: videonsole
+Section: video
+Priority: optional
+Maintainer: Piotr Lewandowski <piotr.petexy@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               cargo,
+               rustc (>= 1.87),
+               pkg-config,
+               libasound2-dev,
+               libavcodec-dev,
+               libavformat-dev,
+               libavutil-dev,
+               libswresample-dev,
+               libswscale-dev,
+               lxb-toolkit-dev (>= @TOOLKIT_VERSION@)
+Standards-Version: 4.7.4
+Rules-Requires-Root: no
+
+Package: videonsole
+Architecture: linux-any
+Description: a film browser and player in the LineXinBar design language, shown as Videos

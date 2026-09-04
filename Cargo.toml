@@ -1,0 +1,102 @@
+[package]
+name = "videonsole"
+version = "0.9.0"
+edition = "2021"
+rust-version = "1.87"
+license = "GPL-3.0-only"
+description = "A film browser and player in the LineXinBar design language, shown as Videos"
+repository = "https://github.com/Petexy/videonsole"
+
+[workspace]
+
+[dependencies]
+# The design language itself: colour, material, motion, type, metrics, marks
+# and what a control means. No dependencies of its own, and every value this
+# application draws is asked of it by name.
+lxb-toolkit = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-toolkit" }
+
+# The renderer that answers those names with the real material — the glass, the
+# wallpaper behind it, the marks as beads of water, the context menu, the
+# dialog and the built-in file chooser — and which also says what is under the
+# pointer.
+#
+# This application does **not** use `lxb-app`, which is the window most
+# applications want. It draws its own, for the reason `src/film.rs` gives:
+# `Ui::picture` reads a *file* into a 512-pixel cell of a shared atlas, and a
+# film is not a file that can be read once. Its frames arrive sixty times a
+# second at their own resolution, so the frame is composed by `lxb-render` as
+# everywhere else and the film is drawn over it in a pass of this
+# application's own.
+lxb-render = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-render" }
+
+# Every controller on the machine and the keyboard, as one list of actions.
+lxb-input = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-input", features = [
+    "winit",
+] }
+
+# The shell's own recordings, at the rests the language keeps.
+lxb-sound = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-sound" }
+
+# Read directly for one thing only: how far the triggers are pulled. An action
+# says a thing happened and a trigger says how far, and scanning through a film
+# is the one control here that wants the second. `lxb-input` reads this same
+# crate and stays the only thing that decides what any *button* means — see
+# `src/pad.rs`. Pinned to the version `lxb-input` asks for, so there is one
+# copy in the binary.
+gilrs = "0.11.2"
+
+# The film: demuxing it, decoding it, turning its frames into the pixels a
+# texture wants and its samples into the ones a sound card wants.
+#
+# The same crate LineXinBar decodes a wallpaper film with, so a format that
+# plays here is a format that can stand behind the shell — one decoder to be
+# right about rather than two. Five features, and the cut is the shape of the
+# program: `codec` and `format` open a file and decode it, `software-scaling`
+# turns a frame into RGBA, `software-resampling` turns a soundtrack into the
+# samples `rodio` plays. The shell deliberately builds this *without* the last
+# one, because a wallpaper is silent; this is a player, and it is the whole
+# difference.
+#
+# Hardware decoding does not appear here as a feature because it is not one:
+# `av_hwdevice_ctx_create` and its neighbours are in `ffmpeg_next::ffi`, which
+# is always compiled. See `src/player.rs`.
+ffmpeg-next = { version = "9", default-features = false, features = [
+    "codec",
+    "format",
+    "software-resampling",
+    "software-scaling",
+] }
+
+# Playing what comes out of it. The crate `lxb-sound` already plays the
+# interface's own recordings with, at the version it asks for, so the film's
+# soundtrack and the sound a press makes leave this process through one
+# library rather than two fighting over a device.
+rodio = { version = "0.22", default-features = false, features = ["playback"] }
+
+# Subtitles, and only subtitles.
+#
+# The film is drawn over the frame the toolkit composed, so a word the toolkit
+# wrote would be *underneath* it — which is why this is here at all and why it
+# is the same crate `lxb-render` sets its own type with, at the same version.
+# One copy in the binary, one rasteriser, and the subtitle is written in the
+# face the interface is written in: `lxb_toolkit::assets::FONT_REGULAR`.
+glyphon = "0.12"
+
+# Writing a PNG: the poster frame a film wears in the grid, into the cache
+# every desktop on this machine shares, and the one frame `--shot` keeps.
+png = "0.17"
+
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "0.4"
+wgpu = "30"
+winit = { version = "0.30", default-features = false, features = [
+    "rwh_06",
+    "wayland",
+    "wayland-dlopen",
+    "x11",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

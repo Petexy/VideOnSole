@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.petexy.videonsole</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+
+  <name>Videos</name>
+  <summary>Watch your films with a controller</summary>
+
+  <description>
+    <p>
+      Videos is a film browser and player drawn in the LineXinBar design
+      language: the same colours, glass, motion and marks as the shell it was
+      made for, and driven from a controller, a keyboard and a pointer at once.
+    </p>
+    <p>
+      A folder is a wall of films, each card wearing a frame out of the film
+      itself and how long it runs. Those frames are written to the same
+      thumbnail cache every other program on the machine shares, so a folder
+      browsed here is a folder with pictures on it everywhere else too.
+    </p>
+    <p>
+      Playing one fills the screen with the film. The controls come up when
+      anything is pressed and go away four seconds later, and the film grows to
+      take the whole screen when they do — nothing is ever drawn over the
+      picture except its subtitles. Left and right move through the film, ten
+      seconds a press and further while held; the triggers scan through it; up
+      and down are the volume.
+    </p>
+    <p>
+      Where you left off is remembered and offered again the next time that
+      film is opened, and a film watched to its end is forgotten rather than
+      remembered at its credits. Subtitles come from inside the film or from a
+      file beside it, and one the film marks as forced — or one somebody put
+      there themselves — is shown without being asked for.
+    </p>
+    <p>
+      Films decode through this machine's video hardware where it has any, and
+      in software where it does not.
+    </p>
+    <p>It is an ordinary Wayland application and runs on any desktop.</p>
+  </description>
+
+  <launchable type="desktop-id">videonsole.desktop</launchable>
+  <provides>
+    <binary>videonsole</binary>
+  </provides>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+    <category>Player</category>
+  </categories>
+
+  <supports>
+    <control>gamepad</control>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+
+  <developer id="io.github.petexy">
+    <name>Piotr Lewandowski</name>
+  </developer>
+
+  <url type="homepage">https://github.com/Petexy/videonsole</url>
+  <url type="bugtracker">https://github.com/Petexy/videonsole/issues</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.9.0" type="development" date="2026-08-31">
+      <description>
+        <p>The first release. A folder of films, and one film at a time.</p>
+        <p>
+          This release shares its version with LineXinBar, lxb-toolkit,
+          Imagonsole, DistriBumpy and CEDM.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>
