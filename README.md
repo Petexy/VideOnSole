@@ -371,6 +371,12 @@ or a real package:
 
 See [`packaging/README.md`](packaging/README.md).
 
+## Languages
+
+English and Polish, in whichever one the session speaks — on LineXinBar, the
+one Settings > Language names. See [localization](docs/localization.md) for the
+catalogs, how to look at a page in the other language, and how to add one.
+
 ## Licence
 
 [GPL-3.0-only](LICENSE), matching LineXinBar and the toolkit.

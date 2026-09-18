@@ -542,6 +542,19 @@ impl View {
         self.black
     }
 
+    /// How far the player is standing on the film's own black rather than on
+    /// the shell's page.
+    ///
+    /// **One reading, because three things are on it**: the band the button
+    /// hints sit in, the material every panel in the player is cut from, and
+    /// how much of the film `film.rs` puts behind that material. Two readings
+    /// of one question is the defect this repo keeps finding, and here it
+    /// would be a bar whose colour had left before the black it was drawn
+    /// against.
+    pub fn on_black(&self) -> f32 {
+        (self.blackout() * self.grown()).clamp(0.0, 1.0)
+    }
+
     /// Whether the transport, the head and the legend are on the screen.
     ///
     /// The one thing that decides how much room the film gets, so it is one
@@ -1099,12 +1112,11 @@ impl View {
             // A file with nothing in it this can read. Said on the page rather
             // than swallowed: somebody who has just chosen a file is owed an
             // answer about that file.
-            self.note = Some(format!(
-                "Nothing to read in {}",
-                path.file_name()
+            self.note = Some(
+                crate::message!("nothing-to-read-in", "value" => (path.file_name()
                     .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default()
-            ));
+                    .unwrap_or_default()).to_string()),
+            );
             return Some(Sound::Error);
         };
         // And shown, because adding one is asking for it.
@@ -1128,7 +1140,7 @@ impl View {
         self.note = self
             .folder
             .unreadable
-            .then(|| String::from("This folder cannot be opened"));
+            .then(|| String::from(crate::i18n::text("this-folder-cannot-be-opened")));
     }
 
     fn reread(&mut self) {
@@ -1449,24 +1461,28 @@ impl View {
             rows.push((
                 Line::new(
                     if self.fill {
-                        "Fit to the screen"
+                        crate::i18n::text("fit-to-the-screen")
                     } else {
-                        "Fill the screen"
+                        crate::i18n::text("fill-the-screen")
                     },
                     "setting-scale",
                 ),
                 Command::Fill,
             ));
             rows.push((
-                Line::new("Start from the beginning", "media-previous").group(1),
+                Line::new(
+                    crate::i18n::text("start-from-the-beginning"),
+                    "media-previous",
+                )
+                .group(1),
                 Command::FromTheStart,
             ));
             rows.push((
                 Line::new(
                     if self.run_the_folder {
-                        "Stop playing the folder"
+                        crate::i18n::text("stop-playing-the-folder")
                     } else {
-                        "Play the whole folder"
+                        crate::i18n::text("play-the-whole-folder")
                     },
                     "media-play",
                 ),
@@ -1490,7 +1506,7 @@ impl View {
                 .unwrap_or_default();
             let chosen = self.player.as_ref().and_then(|player| player.chosen());
             rows.push((
-                Line::new("No subtitles", "setting-typed")
+                Line::new(crate::i18n::text("no-subtitles"), "setting-typed")
                     .ticked(chosen.is_none())
                     .group(2),
                 Command::Subtitles(None),
@@ -1501,23 +1517,23 @@ impl View {
                 // a track inside the film and a file somebody put beside
                 // it are different things with the same kind of name.
                 let row = if track.from_a_file {
-                    row.detail("From a file")
+                    row.detail(crate::i18n::text("from-a-file"))
                 } else {
                     row
                 };
                 rows.push((row, Command::Subtitles(Some(number))));
             }
             rows.push((
-                Line::new("Add a subtitle file…", "file-page"),
+                Line::new(crate::i18n::text("add-a-subtitle-file"), "file-page"),
                 Command::AddSubtitles,
             ));
 
             rows.push((
                 Line::new(
                     if self.info {
-                        "Hide the details"
+                        crate::i18n::text("hide-the-details")
                     } else {
-                        "Show the details"
+                        crate::i18n::text("show-the-details")
                     },
                     "setting-info",
                 )
@@ -1525,7 +1541,7 @@ impl View {
                 Command::Info,
             ));
             rows.push((
-                Line::new("Back to the folder", "category-video").group(4),
+                Line::new(crate::i18n::text("back-to-the-folder"), "category-video").group(4),
                 Command::BackToGrid,
             ));
             return (
@@ -1549,9 +1565,9 @@ impl View {
         rows.push((
             Line::new(
                 if self.hidden {
-                    "Hide hidden files"
+                    crate::i18n::text("hide-hidden-files")
                 } else {
-                    "Show hidden files"
+                    crate::i18n::text("show-hidden-files")
                 },
                 "setting-typed",
             )
@@ -1559,11 +1575,14 @@ impl View {
             Command::ShowHidden,
         ));
         rows.push((
-            Line::new("Open another folder…", "file-folder").group(2),
+            Line::new(crate::i18n::text("open-another-folder"), "file-folder").group(2),
             Command::OpenFolder,
         ));
-        rows.push((Line::new("Up a folder", "arrow-up"), Command::UpAFolder));
-        (String::from("Options"), rows)
+        rows.push((
+            Line::new(crate::i18n::text("up-a-folder"), "arrow-up"),
+            Command::UpAFolder,
+        ));
+        (String::from(crate::i18n::text("options")), rows)
     }
 
     // ---- how the film sits on the stage ----------------------------------
@@ -2643,6 +2662,33 @@ mod tests {
         view.mode = Mode::Grid;
         view.black = 1.0;
         assert_eq!(view.blackout(), 0.0, "and a folder is never on black");
+    }
+
+    /// **The one reading three things are on.** A film opening out of a card
+    /// is not yet on black however black it is about to be, because the black
+    /// arrives with the picture and not before it — see `View::on_black`.
+    #[test]
+    fn a_film_is_on_black_only_as_far_as_it_has_grown() {
+        let mut view = watching();
+        let geometry = Geometry::of([1600.0, 900.0], |value| value, 12.0);
+        view.measure(&geometry);
+        view.mode = Mode::Player;
+        view.black = 1.0;
+        view.going = Going::Nowhere;
+        assert_eq!(view.on_black(), 1.0, "a film that has taken the window");
+        view.going = Going::In;
+        view.to_go = 1.0;
+        assert_eq!(
+            view.on_black(),
+            0.0,
+            "and none of it on the frame the card was pressed"
+        );
+        view.to_go = 0.5;
+        let halfway = view.on_black();
+        assert!(
+            halfway > 0.0 && halfway < 1.0,
+            "and something in between all the way across, not a step: {halfway}"
+        );
     }
 
     /// **The row of button hints is never inside the transport's panel.** The

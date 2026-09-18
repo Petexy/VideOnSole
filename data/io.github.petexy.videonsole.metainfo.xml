@@ -5,7 +5,23 @@
   <project_license>GPL-3.0-only</project_license>
 
   <name>Videos</name>
+  <name xml:lang="de">Videos</name>
+  <name xml:lang="es">Vídeos</name>
+  <name xml:lang="fr">Vidéos</name>
+  <name xml:lang="hi">वीडियो</name>
+  <name xml:lang="pl">Filmy</name>
+  <name xml:lang="pt_BR">Vídeos</name>
+  <name xml:lang="ru">Видео</name>
+  <name xml:lang="zh_CN">视频</name>
   <summary>Watch your films with a controller</summary>
+  <summary xml:lang="de">Sehen Sie Ihre Filme mit einem Controller</summary>
+  <summary xml:lang="es">Explore y reproduzca sus vídeos con un mando</summary>
+  <summary xml:lang="fr">Parcourez et lisez vos vidéos à la manette</summary>
+  <summary xml:lang="hi">कंट्रोलर से अपनी फ़िल्में देखें</summary>
+  <summary xml:lang="pl">Przeglądaj i odtwarzaj filmy za pomocą kontrolera</summary>
+  <summary xml:lang="pt_BR">Assista aos seus filmes com um controle</summary>
+  <summary xml:lang="ru">Смотрите свои фильмы с контроллера</summary>
+  <summary xml:lang="zh_CN">用手柄观看您的影片</summary>
 
   <description>
     <p>
@@ -39,6 +55,28 @@
       in software where it does not.
     </p>
     <p>It is an ordinary Wayland application and runs on any desktop.</p>
+
+    <p xml:lang="es">Vídeos es un explorador y reproductor de vídeo con el aspecto de LineXinBar, manejado con mando, teclado y ratón.</p>
+    <p xml:lang="es">Recorra carpetas, reproduzca vídeos a resolución completa y siga viendo desde donde lo dejó. Puede reproducir una carpeta entera.</p>
+    <p xml:lang="es">El reproductor admite pistas de audio, subtítulos incrustados y de archivos aparte, y la descodificación por hardware disponible. Funciona como una aplicación Wayland corriente.</p>
+    <p xml:lang="fr">Vidéos est un explorateur et lecteur vidéo à l'aspect de LineXinBar, piloté à la manette, au clavier et à la souris.</p>
+    <p xml:lang="fr">Parcourez des dossiers, lisez des vidéos en pleine résolution et reprenez là où vous vous étiez arrêté. Vous pouvez lire un dossier entier.</p>
+    <p xml:lang="fr">Le lecteur gère les pistes audio, les sous-titres incrustés comme ceux de fichiers séparés, et le décodage matériel quand il est disponible. Il fonctionne comme une application Wayland ordinaire.</p>
+    <p xml:lang="pl">Filmy to przeglądarka i odtwarzacz wideo utrzymany w stylu LineXinBar, obsługiwany kontrolerem, klawiaturą i myszą.</p>
+    <p xml:lang="pl">Przeglądaj foldery, odtwarzaj filmy w pełnej rozdzielczości i kontynuuj oglądanie od zapamiętanego miejsca. Możesz odtworzyć cały folder.</p>
+    <p xml:lang="pl">Odtwarzacz obsługuje ścieżki dźwiękowe, napisy osadzone w filmie i z osobnych plików oraz dostępne sprzętowe dekodowanie. Działa jako zwykła aplikacja Wayland.</p>
+    <p xml:lang="de">Videos ist ein Videobetrachter und -player im Erscheinungsbild von LineXinBar, bedient mit Controller, Tastatur und Maus.</p>
+    <p xml:lang="de">Durchsuchen Sie Ordner, spielen Sie Filme in voller Auflösung ab und sehen Sie dort weiter, wo Sie aufgehört haben. Ein ganzer Ordner lässt sich am Stück abspielen.</p>
+    <p xml:lang="de">Der Player beherrscht Tonspuren, eingebettete Untertitel und solche aus eigenen Dateien sowie die vorhandene Hardware-Dekodierung. Er läuft als gewöhnliche Wayland-Anwendung.</p>
+    <p xml:lang="pt_BR">Vídeos é um navegador e reprodutor de vídeo com a aparência do LineXinBar, controlado por controle, teclado e mouse.</p>
+    <p xml:lang="pt_BR">Percorra pastas, reproduza filmes em resolução total e continue de onde parou. Uma pasta inteira pode ser reproduzida de uma vez.</p>
+    <p xml:lang="pt_BR">O reprodutor lida com faixas de áudio, legendas embutidas e em arquivos separados, e com a decodificação por hardware disponível. Funciona como um aplicativo Wayland comum.</p>
+    <p xml:lang="ru">Видео — программа для просмотра и воспроизведения фильмов в оформлении LineXinBar, управляемая контроллером, клавиатурой и мышью.</p>
+    <p xml:lang="ru">Просматривайте папки, воспроизводите фильмы в полном разрешении и продолжайте с того места, где остановились. Папку можно проиграть целиком.</p>
+    <p xml:lang="ru">Проигрыватель работает со звуковыми дорожками, встроенными субтитрами и субтитрами из отдельных файлов, а также с доступным аппаратным декодированием. Это обычное приложение Wayland.</p>
+    <p xml:lang="zh_CN">视频是一款采用 LineXinBar 设计语言的影片浏览与播放程序，可用手柄、键盘和鼠标操作。</p>
+    <p xml:lang="zh_CN">浏览文件夹、以完整分辨率播放影片，并从上次停下的位置继续观看。整个文件夹也可以连续播放。</p>
+    <p xml:lang="zh_CN">播放器支持音轨、内嵌字幕和外挂字幕文件，并会使用可用的硬件解码。它是一个普通的 Wayland 应用程序。</p>
   </description>
 
   <launchable type="desktop-id">videonsole.desktop</launchable>
@@ -78,4 +116,15 @@
       </description>
     </release>
   </releases>
+  <languages>
+    <lang percentage="100">en</lang>
+    <lang percentage="100">de</lang>
+    <lang percentage="100">es</lang>
+    <lang percentage="100">fr</lang>
+    <lang percentage="100">hi</lang>
+    <lang percentage="100">pl</lang>
+    <lang percentage="100">pt_BR</lang>
+    <lang percentage="100">ru</lang>
+    <lang percentage="100">zh_CN</lang>
+  </languages>
 </component>

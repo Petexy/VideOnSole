@@ -11,8 +11,8 @@ repository = "https://github.com/Petexy/videonsole"
 
 [dependencies]
 # The design language itself: colour, material, motion, type, metrics, marks
-# and what a control means. No dependencies of its own, and every value this
-# application draws is asked of it by name.
+# and what a control means — the words the file question says among them. Every
+# value this application draws is asked of it by name.
 lxb-toolkit = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-toolkit" }
 
 # The renderer that answers those names with the real material — the glass, the

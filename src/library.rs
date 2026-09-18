@@ -87,12 +87,12 @@ impl Order {
 
     pub fn label(self) -> &'static str {
         match self {
-            Order::Name => "Name",
-            Order::NameReversed => "Name, backwards",
-            Order::Newest => "Newest first",
-            Order::Oldest => "Oldest first",
-            Order::Largest => "Largest first",
-            Order::Smallest => "Smallest first",
+            Order::Name => crate::i18n::text("name"),
+            Order::NameReversed => crate::i18n::text("name-backwards"),
+            Order::Newest => crate::i18n::text("newest-first"),
+            Order::Oldest => crate::i18n::text("oldest-first"),
+            Order::Largest => crate::i18n::text("largest-first"),
+            Order::Smallest => crate::i18n::text("smallest-first"),
         }
     }
 }

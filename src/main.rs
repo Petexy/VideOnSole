@@ -24,6 +24,7 @@
 mod draw;
 mod facts;
 mod film;
+mod i18n;
 mod legend;
 mod library;
 mod pad;
@@ -67,12 +68,6 @@ use view::{Command, Geometry, Mode, View};
 /// is for people and may be anything; this one is for matching a launched
 /// process to the window that appeared, and it has to agree in five places.
 const APP_ID: &str = "videonsole";
-
-/// What it is called to a person, which is the name on the desktop entry, in
-/// the AppStream data and on the window. Videonsole is the project, the
-/// package and the command; **Videos** is the application — the same split
-/// Imagonsole has, which ships as `imagonsole` and is shown as Pictures.
-const TITLE: &str = "Videos";
 
 /// What the window is drawn into. `Bgra8UnormSrgb` is what a Wayland surface
 /// wants; the film's own pass is built for whichever this is, so that a film
@@ -346,7 +341,7 @@ impl ApplicationHandler for Application {
             return;
         }
         let attributes = Window::default_attributes()
-            .with_title(TITLE)
+            .with_title(crate::i18n::text("app-title"))
             // An application on LineXinBar is maximised and pinned to the
             // display it launched on; this size is for every other desktop.
             .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 800.0))
@@ -658,6 +653,7 @@ impl Application {
                         holes: &over.holes,
                         blackout: over.blackout,
                         curtain: over.curtain,
+                        behind: over.behind,
                     },
                 );
                 captions.draw(&mut encoder, &target);
@@ -906,6 +902,7 @@ fn shot(path: &str, arguments: &[String]) -> Result<(), String> {
             holes: &over.holes,
             blackout: over.blackout,
             curtain: over.curtain,
+            behind: over.behind,
         },
     );
     captions.draw(&mut encoder, &target);

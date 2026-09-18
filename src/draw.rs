@@ -13,7 +13,7 @@
 use lxb_render::{Align, Fit, Ui};
 use lxb_toolkit::{
     control,
-    material::{Overlay, Surface},
+    material::{light, Surface},
     metrics::Metric,
     palette::Role,
     settings::IconStyle,
@@ -43,6 +43,10 @@ pub struct Over {
     /// anything it drew under this pass's black would be under it for good.
     pub blackout: f32,
     pub curtain: Hole,
+    /// How much of the film the panels standing over it show through — the
+    /// same reading of [`crate::view::View::on_black`] that stained them, so
+    /// the picture arrives behind the glass on the frame the accent leaves it.
+    pub behind: f32,
     /// Where the groove ended up, so a click on it can be turned back into a
     /// place in the film. Worked out while drawing because that is the only
     /// place it is known, and a second copy of the sum would be a groove that
@@ -101,22 +105,60 @@ fn cut_under(ui: &mut Ui, view: &View, panel: [f32; 4]) {
     }
 }
 
-/// The hole a pane asks the film to leave for it.
+/// How deeply a panel is stained once it is standing on a film.
 ///
-/// The rim is drawn *outside* the pane it edges, so the hole has to be too —
-/// a hole cut at the pane's own rectangle leaves a hairline of film running
-/// the whole way round it.
+/// The toolkit's own panel is stained [`light::SIDEBAR_STAIN`], which is the
+/// depth that lets the shell's wallpaper come through a menu as colour. On a
+/// film there is no wallpaper to let through and the colour is the picture's,
+/// so the stain goes nearly the whole way: what is left of the refraction is
+/// the bevel at the panel's edge, and the film behind it arrives from
+/// `film.rs` rather than from the page.
+const ON_BLACK_STAIN: f32 = 0.88;
+
+/// The material every panel in the player is cut from.
+///
+/// **Why this is not `Ui::pane`.** The toolkit's pane is lit by the accent at
+/// its head and at its foot, rimmed in it, and stained thinly enough to
+/// refract whatever the page drew underneath — which, on the shell's own
+/// wallpaper, is the accent a third time. That is the right material for a
+/// panel on a page and the wrong one for a panel standing on a film: the film
+/// is the picture, and a bar of the shell's colour laid across it reads as
+/// something pasted on top rather than a pane over it.
+///
+/// So `on_black` — [`View::on_black`], nought for a film that is a picture on
+/// the page and one for a film that has taken the window — takes the accent
+/// out of the material: the stain deepens until the wallpaper behind it is
+/// gone, and what stands in for that much of the glass instead is the film,
+/// blurred, laid in by `film.rs` inside the hole this panel asks for. The
+/// glass, the gloss and the bevel are the toolkit's own [`Surface::Sidebar`]
+/// throughout, because those are the material and the accent was only ever the
+/// light on it.
+///
+/// **One quad, crossfaded, rather than two panels dissolving.** Pausing a film
+/// hands the window back to the page over the whole of `motion::duration::PANEL`
+/// and the panels stay on the screen the whole way, so the two materials are
+/// one stain moving between two numbers. Two glass quads at half strength each
+/// would be two bevels, two rims and two sets of corners for a third of a
+/// second, every time somebody pressed pause.
+fn panel(ui: &mut Ui, rect: [f32; 4], on_black: f32) {
+    let on_black = on_black.clamp(0.0, 1.0);
+    let stain = light::SIDEBAR_STAIN + (ON_BLACK_STAIN - light::SIDEBAR_STAIN) * on_black;
+    ui.card(rect, Surface::Sidebar, Role::Glass, stain);
+    // The rim, in ink rather than in accent. It is drawn *inside* the
+    // rectangle, which is what lets the hole below be the rectangle itself.
+    ui.control_out(rect, ui.m(Metric::CardRadius), 1.0);
+}
+
+/// The hole a panel asks the film to leave for it.
+///
+/// The panel's own rectangle exactly: [`panel`] draws nothing outside it, and
+/// the edge the glass is feathered over is the same three quarters of a pixel
+/// the film's shader feathers a hole over, so the two meet without a hairline
+/// of either.
 fn hole_for(ui: &Ui, rect: [f32; 4]) -> Hole {
-    let material = Overlay::ContextMenu.material();
-    let rim = ui.s(material.rim_width).max(1.0);
     Hole {
-        rect: [
-            rect[0] - rim,
-            rect[1] - rim,
-            rect[2] + rim * 2.0,
-            rect[3] + rim * 2.0,
-        ],
-        radius: ui.s(material.radius) + rim,
+        rect,
+        radius: ui.m(Metric::CardRadius),
     }
 }
 
@@ -131,24 +173,24 @@ pub fn hints(view: &View) -> Vec<Hint> {
             // word changes with it rather than naming something that does not
             // happen.
             let mut hints = vec![
-                hint("Options", Button::Options),
+                hint(crate::i18n::text("options"), Button::Options),
                 if view.closes_on_back() {
-                    hint("Close", Button::Back)
+                    hint(crate::i18n::text("close"), Button::Back)
                 } else {
-                    hint("Back", Button::Back)
+                    hint(crate::i18n::text("back"), Button::Back)
                 },
             ];
             if view.folder.films() > 0 {
-                hints.insert(0, hint("Play the folder", Button::Start));
+                hints.insert(0, hint(crate::i18n::text("play-the-folder"), Button::Start));
             }
             if view.current().is_some() {
                 hints.insert(
                     0,
                     hint(
                         if view.current().is_some_and(|entry| entry.is_folder()) {
-                            "Open"
+                            crate::i18n::text("open")
                         } else {
-                            "Play"
+                            crate::i18n::text("play")
                         },
                         Button::Accept,
                     ),
@@ -165,13 +207,20 @@ pub fn hints(view: &View) -> Vec<Hint> {
                 // What the button really does, which is not the same word for
                 // the whole of a film: a legend saying Pause over a stopped
                 // film is naming something that does not happen.
-                hint(if playing { "Pause" } else { "Play" }, Button::Accept),
-                hint("Play the folder", Button::Start),
-                hint("Options", Button::Options),
+                hint(
+                    if playing {
+                        crate::i18n::text("pause")
+                    } else {
+                        crate::i18n::text("play")
+                    },
+                    Button::Accept,
+                ),
+                hint(crate::i18n::text("play-the-folder"), Button::Start),
+                hint(crate::i18n::text("options"), Button::Options),
                 if view.closes_on_back() {
-                    hint("Close", Button::Back)
+                    hint(crate::i18n::text("close"), Button::Back)
                 } else {
-                    hint("Back", Button::Back)
+                    hint(crate::i18n::text("back"), Button::Back)
                 },
             ]
         }
@@ -227,6 +276,7 @@ pub fn draw(
     if view.mode == Mode::Player || view.leaving() {
         over.blackout = view.blackout();
         over.curtain = view.letterbox(geometry);
+        over.behind = view.on_black();
     }
 
     // The legend goes with the transport: a film that has taken the whole
@@ -247,7 +297,7 @@ pub fn draw(
         // It arrives and leaves **with the picture**, not with the state: a
         // strip of black across the foot of a window whose film is still the
         // size of a card belongs to nothing on the screen.
-        let letterbox = view.blackout() * view.grown();
+        let letterbox = view.on_black();
         if letterbox > 0.001 {
             blackout(ui, view.hints_band(geometry), letterbox);
         }
@@ -351,9 +401,9 @@ fn grid(view: &mut View, ui: &mut Ui, geometry: &Geometry, posters: &Posters, ic
             ],
             Text::Body,
             if view.folder.unreadable {
-                "This folder cannot be opened"
+                crate::i18n::text("this-folder-cannot-be-opened")
             } else {
-                "No films here"
+                crate::i18n::text("no-films-here")
             },
             Role::TextSoft,
             Align::Centre,
@@ -447,20 +497,18 @@ pub fn shown_range(view: &View, geometry: &Geometry) -> (usize, usize) {
 fn count(view: &View) -> String {
     let films = view.folder.films();
     let folders = view.folder.entries.len() - films;
+    // Counts go to the catalog as numbers, never as text: the form of the noun
+    // is the language's decision and it makes it by looking at the number.
     match (films, folders) {
         (0, 0) => String::new(),
-        (0, folders) => plural(folders, "folder", "folders"),
-        (films, 0) => plural(films, "film", "films"),
+        (0, folders) => crate::message!("count-folders", "count" => folders),
+        (films, 0) => crate::message!("count-films", "count" => films),
         (films, folders) => format!(
             "{}  ·  {}",
-            plural(films, "film", "films"),
-            plural(folders, "folder", "folders")
+            crate::message!("count-films", "count" => films),
+            crate::message!("count-folders", "count" => folders)
         ),
     }
-}
-
-fn plural(count: usize, one: &str, many: &str) -> String {
-    format!("{count} {}", if count == 1 { one } else { many })
 }
 
 fn card(
@@ -657,7 +705,7 @@ fn player(
         let away = geometry.head_away(view.transport);
         let pane = geometry.head_pane();
         let pane = [pane[0], pane[1] - away, pane[2], pane[3]];
-        ui.pane(pane, Overlay::ContextMenu);
+        panel(ui, pane, view.on_black());
         cut_under(ui, view, pane);
         over.holes.push(hole_for(ui, pane));
         head(
@@ -718,7 +766,7 @@ fn player(
             ui.label(
                 middle,
                 Text::Body,
-                "Opening…",
+                crate::i18n::text("opening"),
                 Role::TextSoft,
                 Align::Centre,
             );
@@ -769,7 +817,7 @@ fn player(
         let away = geometry.transport_away(view.transport);
         let band = geometry.transport_at();
         let pane = [band[0], band[1] + away, band[2], band[3]];
-        ui.pane(pane, Overlay::ContextMenu);
+        panel(ui, pane, view.on_black());
         cut_under(ui, view, pane);
         over.holes.push(hole_for(ui, pane));
         over.groove = transport(view, ui, geometry, away, icons);
@@ -947,25 +995,28 @@ fn saying(view: &View) -> String {
         return String::new();
     };
     if player.ended() {
-        return String::from("The end");
+        return String::from(crate::i18n::text("the-end"));
     }
     if player.seeking() {
         return String::new();
     }
     let mut said = Vec::new();
     if let Some(from) = view.resumed_at {
-        said.push(format!(
-            "Carried on from {}",
-            facts::clock(from, player.length())
+        said.push(crate::message!(
+            "carried-on-from",
+            "time" => facts::clock(from, player.length())
         ));
     }
     if view.run_the_folder {
-        said.push(String::from("Playing the folder"));
+        said.push(String::from(crate::i18n::text("playing-the-folder")));
     }
     if view.muted {
-        said.push(String::from("Muted"));
+        said.push(String::from(crate::i18n::text("muted")));
     } else if view.volume < 0.999 {
-        said.push(format!("Volume {:.0}%", view.volume * 100.0));
+        said.push(crate::message!(
+            "volume-per-cent",
+            "per-cent" => format!("{:.0}", view.volume * 100.0)
+        ));
     }
     said.join("  ·  ")
 }
@@ -982,7 +1033,7 @@ fn position(view: &View) -> String {
     if total == 0 {
         return String::new();
     }
-    format!("{} of {total}", before + 1)
+    crate::message!("place-in-folder", "place" => before + 1, "total" => total)
 }
 
 /// The pane of details, down the right-hand side.
@@ -1005,7 +1056,7 @@ fn details(
     // every moment of the animation, so it is asked for rather than worked out
     // here and the two cannot disagree: see `View::details_pane`.
     let rect = view.details_pane(geometry);
-    ui.pane(rect, Overlay::ContextMenu);
+    panel(ui, rect, view.on_black());
 
     let padding = ui.m(Metric::PanelPadding);
     let mut at = rect[1] + padding;
@@ -1037,7 +1088,7 @@ fn details(
     };
 
     let name = fit_text(ui, Text::Body, &entry.name, inner);
-    say(ui, &mut at, "Name", &name);
+    say(ui, &mut at, crate::i18n::text("name"), &name);
 
     // What the player knows first, and what was read off the file before it —
     // so the pane says something the moment it is opened rather than filling
@@ -1053,7 +1104,7 @@ fn details(
         .filter(|(width, height)| *width > 0 && *height > 0)
         .map(|(width, height)| facts::picture(width, height))
         .unwrap_or_default();
-    say(ui, &mut at, "Picture", &size);
+    say(ui, &mut at, crate::i18n::text("picture"), &size);
 
     let length = player
         .map(|player| player.length())
@@ -1062,23 +1113,33 @@ fn details(
         .filter(|length| *length > 0.0)
         .map(facts::length)
         .unwrap_or_default();
-    say(ui, &mut at, "Length", &length);
-    say(ui, &mut at, "On disk", &facts::size(entry.bytes));
+    say(ui, &mut at, crate::i18n::text("length"), &length);
+    say(
+        ui,
+        &mut at,
+        crate::i18n::text("on-disk"),
+        &facts::size(entry.bytes),
+    );
 
     // Which is worth saying because it is the answer to "why is this film
     // stuttering" and to "why does this film look wrong", and there is nowhere
     // else on the machine to find it out.
     let decoded = player.map(|player| player.decoded_by()).unwrap_or_default();
-    say(ui, &mut at, "Decoded by", &decoded);
+    say(ui, &mut at, crate::i18n::text("decoded-by"), &decoded);
     let sound = match player {
-        Some(player) if player.has_sound() => "Yes",
-        Some(_) => "None",
+        Some(player) if player.has_sound() => crate::i18n::text("yes"),
+        Some(_) => crate::i18n::text("none"),
         None => "",
     };
-    say(ui, &mut at, "Sound", sound);
+    say(ui, &mut at, crate::i18n::text("sound"), sound);
 
     if let Some(changed) = entry.changed {
-        say(ui, &mut at, "Written", &facts::when(changed));
+        say(
+            ui,
+            &mut at,
+            crate::i18n::text("written"),
+            &facts::when(changed),
+        );
     }
     let folder = entry
         .path
@@ -1086,7 +1147,7 @@ fn details(
         .map(|path| path.display().to_string())
         .unwrap_or_default();
     let folder = cut_from_the_front(ui, &folder, inner);
-    say(ui, &mut at, "Folder", &folder);
+    say(ui, &mut at, crate::i18n::text("folder"), &folder);
 
     hole_for(ui, rect)
 }

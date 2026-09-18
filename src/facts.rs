@@ -24,7 +24,7 @@ pub fn size(bytes: u64) -> String {
     if unit == 0 {
         format!("{bytes} B")
     } else if value < 10.0 {
-        format!("{value:.1} {}", UNITS[unit])
+        lxb_toolkit::i18n::decimal(format!("{value:.1} {}", UNITS[unit]))
     } else {
         format!("{value:.0} {}", UNITS[unit])
     }
@@ -129,34 +129,19 @@ fn named_resolution(width: u32, height: u32) -> Option<&'static str> {
 /// either way for all but a few hours of it.
 pub fn when(time: SystemTime) -> String {
     let Ok(since) = time.duration_since(SystemTime::UNIX_EPOCH) else {
-        return String::from("Before 1970");
+        return String::from(crate::i18n::text("before-1970"));
     };
     let seconds = since.as_secs();
     let days = (seconds / 86_400) as i64;
     let rest = seconds % 86_400;
     let (year, month, day) = civil(days);
-    format!(
-        "{day} {} {year}, {:02}:{:02}",
-        MONTHS[(month - 1) as usize],
-        rest / 3600,
-        (rest % 3600) / 60
-    )
+    crate::message!("file-date", "day" => day.to_string(),
+        "month" => lxb_toolkit::i18n::month(month as usize), "year" => year.to_string(),
+        // The clock the session is set to, which is a setting rather than a
+        // language: Settings > System > Clock, read out of the shell's own
+        // file. See `lxb_toolkit::settings::twelve_hour_clock`.
+        "time" => lxb_toolkit::i18n::time_of_day((rest / 3600) as u32, ((rest % 3600) / 60) as u32))
 }
-
-const MONTHS: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
 
 /// Days since 1970 to a calendar date.
 ///
@@ -187,12 +172,46 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    /// The figures the lines below are written with, carrying whatever
+    /// decimal mark the session's language uses — a comma in Polish. Asked
+    /// for the same way `size` asks for it, because what this test is about
+    /// is the rounding and the units, and a run under a Polish session that
+    /// failed on a full stop would be failing about the wrong thing.
+    fn as_written(number: &str) -> String {
+        lxb_toolkit::i18n::decimal(number.to_string())
+    }
+
+    /// The same for a date, which is a sentence the catalog builds.
+    fn date(day: u32, month: usize, year: i64, time: &str) -> String {
+        crate::message!("file-date", "day" => day.to_string(),
+            "month" => lxb_toolkit::i18n::month(month), "year" => year.to_string(),
+            "time" => time.to_string())
+    }
+
     #[test]
     fn sizes_read_the_way_a_file_manager_says_them() {
         assert_eq!(size(0), "0 B");
         assert_eq!(size(999), "999 B");
-        assert_eq!(size(1024), "1.0 KB");
-        assert_eq!(size(1024 * 1024 * 1024 * 4 + 1024 * 1024 * 512), "4.5 GB");
+        assert_eq!(size(1024), as_written("1.0 KB"));
+        assert_eq!(
+            size(1024 * 1024 * 1024 * 4 + 1024 * 1024 * 512),
+            as_written("4.5 GB")
+        );
+    }
+
+    /// And what the session's language makes of the same number, which is the
+    /// half the line above cannot state. The two Englishes, Hindi and Chinese
+    /// keep the full stop; the six others write a comma. It follows the
+    /// language and not the country — see `lxb_toolkit::i18n::decimal`.
+    #[test]
+    fn a_quantity_carries_the_decimal_mark_of_the_language() {
+        assert_eq!(
+            lxb_toolkit::i18n::decimal("4.5 GB".to_string()),
+            match lxb_toolkit::i18n::language() {
+                "en-GB" | "en-US" | "hi" | "zh-CN" => "4.5 GB",
+                _ => "4,5 GB",
+            }
+        );
     }
 
     /// The one that matters on the groove: the shape is the film's, so nothing
@@ -241,16 +260,59 @@ mod tests {
         assert_eq!(picture(320, 200), "320 × 200");
     }
 
+    /// Midnight, and it writes the hour the way the shell's own clock does —
+    /// without a leading zero. One `clock-24-hour` in the toolkit's catalogs
+    /// answers for the corner of the start screen, the guide and this line
+    /// alike, so there is one place to change it and no way for the three to
+    /// drift apart.
     #[test]
     fn the_epoch_is_the_first_of_january() {
-        assert_eq!(when(SystemTime::UNIX_EPOCH), "1 January 1970, 00:00");
+        assert_eq!(when(SystemTime::UNIX_EPOCH), date(1, 1, 1970, "0:00"));
+    }
+
+    /// The date each language writes, named rather than taken off this
+    /// machine: Polish puts the month in the genitive.
+    #[test]
+    fn a_date_is_written_the_way_each_language_writes_one() {
+        let catalog = crate::i18n::Catalog::new(crate::i18n::RESOURCES);
+        let months = lxb_toolkit::i18n::Catalog::new(lxb_toolkit::i18n::RESOURCES);
+        let written = |locale: &str| {
+            let mut args = crate::i18n::FluentArgs::new();
+            args.set("day", "29");
+            args.set(
+                "month",
+                months.text_for(locale, "month-february").to_string(),
+            );
+            args.set("year", "2024");
+            args.set("time", "12:00");
+            catalog.format_for(locale, "file-date", &args)
+        };
+        assert_eq!(written("en-GB"), "29 February 2024, 12:00");
+        assert_eq!(written("pl"), "29 lutego 2024, 12:00");
+        // America puts the month first, which is the whole of `en-US.ftl`.
+        assert_eq!(written("en-US"), "February 29, 2024, 12:00");
+        // And an English that is neither reads out of the British catalog.
+        assert_eq!(written("en_AU.UTF-8"), "29 February 2024, 12:00");
+        assert_eq!(written("fr"), "29 février 2024, 12:00");
+        // Spanish fences the month with *de* on both sides, which a separator
+        // and three values could not have written; Portuguese does the same.
+        assert_eq!(written("es"), "29 de febrero de 2024, 12:00");
+        assert_eq!(written("pt_BR"), "29 de fevereiro de 2024, 12:00");
+        // German and Russian point the day, and Russian's month is in the
+        // genitive as Polish's is.
+        assert_eq!(written("de_AT.UTF-8"), "29. Februar 2024, 12:00");
+        assert_eq!(written("ru"), "29 февраля 2024 г., 12:00");
+        assert_eq!(written("hi"), "29 फ़रवरी 2024, 12:00");
+        // Chinese goes largest first, and the month's name is its number and
+        // a character — so the whole date is one message here as well.
+        assert_eq!(written("zh_CN.UTF-8"), "2024年2月29日 12:00");
     }
 
     #[test]
     fn a_leap_day_is_a_leap_day() {
         // 2024-02-29T12:00:00Z
         let time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_709_208_000);
-        assert_eq!(when(time), "29 February 2024, 12:00");
+        assert_eq!(when(time), date(29, 2, 2024, "12:00"));
     }
 
     #[test]

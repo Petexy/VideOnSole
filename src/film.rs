@@ -111,7 +111,45 @@ pub struct Showing<'a> {
     /// them would stay over them. While a film is opening out of a card it is
     /// the card, rounded to match — see [`crate::view::View::letterbox`].
     pub curtain: Hole,
+    /// How much of the film the panels standing over it show through — the
+    /// same [`crate::view::View::on_black`] the panels were stained with, so
+    /// the picture behind the glass arrives on the frame the accent leaves it.
+    ///
+    /// Nought while the film is a picture on the shell's page: there a panel
+    /// has the wallpaper behind it and refracts it, which is what the
+    /// toolkit's own material is for and what this has no business replacing.
+    pub behind: f32,
 }
+
+/// How long the longer edge of the film laid down for the panels is.
+///
+/// Small is the point rather than a compromise: a panel shows the film through
+/// frosted glass, and the shrinking *is* the frosting — done once, by the
+/// sampler, on the way down, instead of by a chain of passes on the way back
+/// up. The shell frosts what is behind its own glass from a picture of 256
+/// along the longer edge; a panel here is a bar two feet wide with a film
+/// under a third of it, so it wants rather more blur than that, not less.
+const BEHIND_EDGE: u32 = 96;
+
+/// What a stained panel lets through of the film behind it.
+///
+/// **Tinted glass absorbs what it transmits.** Everything in this interface is
+/// drawn to be read against something deliberately dark, which is what lets a
+/// panel's own colour stay thin enough to see through. Let a film through at
+/// full strength and the panel stops being a pane and becomes a window: over a
+/// bright frame the white clock and the white marks on it go out, and a
+/// control nobody can read is worse than a bar of the wrong colour. The
+/// shell's own panes over another client's window settled within a hair of
+/// this, for the same reason and against the same wallpaper.
+const TRANSMITTED: f32 = 0.30;
+
+/// The colour the film is laid down in for the panels.
+///
+/// Floating point and linear, because what goes in has already had the film's
+/// own curve taken off it and what comes out is added straight into a frame
+/// that is still in light. Eight bits of a linear channel would band the
+/// shadows, and the shadows are most of what is behind a panel.
+const BEHIND_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 /// How many panels may stand over a film at once.
 ///
@@ -205,6 +243,38 @@ struct Resident {
     size: (u32, u32),
     format: Pixel,
     colour: Colour,
+    /// The same film again, small, for the panels standing over it.
+    behind: Behind,
+}
+
+/// The film laid down at a fraction of its size, for the panels to show.
+///
+/// **Why there is a second copy at all.** A panel over a playing film is a
+/// pane of glass, and what a pane shows is what is behind it out of focus. The
+/// film is sharp and the size of the screen, and reading it blurred where it
+/// stands would be a ring of taps per pixel of every panel, on a picture that
+/// moves twenty-four times a second — which is how a blur shimmers. One pass a
+/// frame at [`BEHIND_EDGE`] costs a fraction of a panel's own area and cannot
+/// shimmer, because the sampler averages the same footprint every frame.
+struct Behind {
+    picture: wgpu::TextureView,
+    read: wgpu::BindGroup,
+    /// What was made, in texels. The shrinking pass is told this so that its
+    /// taps cover exactly one of them.
+    made: (u32, u32),
+}
+
+/// What the shrinking pass is told: what it is making, and the colour the film
+/// declares itself to be.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Shrinking {
+    made: [f32; 2],
+    planes: f32,
+    /// A uniform buffer counts in sixteens; the colour after this has to start
+    /// on one.
+    nothing: f32,
+    colour: [[f32; 4]; 3],
 }
 
 #[repr(C)]
@@ -217,8 +287,8 @@ struct Placed {
     planes: f32,
     colour: [[f32; 4]; 3],
     /// `dim`, how many holes are real, how round this quad's own corners are,
-    /// and one word of nothing — a uniform buffer counts in sixteens and a
-    /// lone float would push the arrays after it off their alignment.
+    /// and — for the pass that puts the film behind the panels, and nothing
+    /// else — how much of it they let through.
     about: [f32; 4],
     holes: [[f32; 4]; HOLES],
     /// The radius of each hole in `x`. The rest is room the alignment was
@@ -253,12 +323,24 @@ pub struct Films {
     /// Its own pipeline and its own copy of the uniform because it is drawn
     /// in the same pass as the film and one buffer cannot hold two values.
     curtain: wgpu::RenderPipeline,
+    /// The film laid down small, once a frame, for the panels to show. A pass
+    /// of its own because it draws into a texture rather than into the window.
+    shrink: wgpu::RenderPipeline,
+    /// That small picture put inside the holes, and nowhere else. Laid over a
+    /// panel that is already whole, at the fraction of it the stain lets
+    /// through — see [`TRANSMITTED`].
+    behind: wgpu::RenderPipeline,
     picture_layout: wgpu::BindGroupLayout,
+    behind_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     buffer: wgpu::Buffer,
     placing: wgpu::BindGroup,
     curtain_buffer: wgpu::Buffer,
     curtain_placing: wgpu::BindGroup,
+    behind_buffer: wgpu::Buffer,
+    behind_placing: wgpu::BindGroup,
+    shrink_buffer: wgpu::Buffer,
+    shrinking: wgpu::BindGroup,
     resident: Option<Resident>,
 }
 
@@ -303,6 +385,45 @@ impl Films {
             label: Some("a film"),
             entries: &entries,
         });
+
+        // What the shrinking pass is told, and what the panels read back.
+        let shrinking_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("the film, small"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let behind_read_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("the film behind a panel"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        // Read in both stages: the quad is grown by how far the
+                        // blur reaches, and that is measured off this texture.
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("film"),
@@ -372,6 +493,105 @@ impl Films {
             cache: None,
         });
 
+        // The film laid down small. Its own shader module rather than another
+        // pair of entry points in the one below, because it is the only pass
+        // here that does not draw into the window and the only one whose first
+        // bind group is not a placement.
+        let shrink_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("the film, small"),
+            bind_group_layouts: &[Some(&shrinking_layout), Some(&picture_layout)],
+            immediate_size: 0,
+        });
+        let shrinking_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("the film, small"),
+            source: wgpu::ShaderSource::Wgsl(SHRINK_SHADER.into()),
+        });
+        let shrink = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("the film, small"),
+            layout: Some(&shrink_layout),
+            vertex: wgpu::VertexState {
+                module: &shrinking_shader,
+                entry_point: Some("shrink_vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shrinking_shader,
+                entry_point: Some("shrink_fs"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: BEHIND_FORMAT,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        // And that picture put behind the panels, **over** rather than added.
+        //
+        // Added was the first answer and it is wrong, in the way this whole
+        // material is built not to be: a panel over a bright frame went white,
+        // and the count in its far corner went with it. Tinted glass does not
+        // add what is behind it to itself — it absorbs, and what comes out is
+        // the picture at the fraction the stain lets through, standing in for
+        // that much of the glass rather than on top of all of it. Which is
+        // also the only form whose panel cannot be brighter than the frame
+        // behind it, and so the only one a white clock survives.
+        //
+        // The colour is blended against the source's alpha; the destination's
+        // own alpha is left exactly as it was, because this is a window that
+        // is already opaque and nothing here is entitled to open a hole in it.
+        let behind_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("the film behind a panel"),
+            bind_group_layouts: &[
+                Some(&placing_layout),
+                Some(&picture_layout),
+                Some(&behind_read_layout),
+            ],
+            immediate_size: 0,
+        });
+        let behind = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("the film behind a panel"),
+            layout: Some(&behind_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("behind_vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("behind_fs"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::Zero,
+                            dst_factor: wgpu::BlendFactor::One,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
         // Linear, which is what upsamples the half-size chroma planes and what
         // fits a film to a screen that is not its own size. No mip chain: a
         // film is shown at about its own size or larger, never at a fraction
@@ -415,16 +635,51 @@ impl Films {
                 resource: curtain_buffer.as_entire_binding(),
             }],
         });
+        let behind_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("the film behind a panel"),
+            size: std::mem::size_of::<Placed>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let behind_placing = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("the film behind a panel"),
+            layout: &placing_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: behind_buffer.as_entire_binding(),
+            }],
+        });
+        let shrink_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("the film, small"),
+            size: std::mem::size_of::<Shrinking>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let shrinking = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("the film, small"),
+            layout: &shrinking_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: shrink_buffer.as_entire_binding(),
+            }],
+        });
 
         Films {
             pipeline,
             curtain,
+            shrink,
+            behind,
             picture_layout,
+            behind_layout: behind_read_layout,
             sampler,
             buffer,
             placing,
             curtain_buffer,
             curtain_placing,
+            behind_buffer,
+            behind_placing,
+            shrink_buffer,
+            shrinking,
             resident: None,
         }
     }
@@ -572,6 +827,46 @@ impl Films {
             size: (frame.width(), frame.height()),
             format: frame.format(),
             colour: Colour::of_frame(frame),
+            behind: self.lay_down_small(device, frame.width(), frame.height()),
+        }
+    }
+
+    /// Make the texture the film is laid down small into.
+    fn lay_down_small(&self, device: &wgpu::Device, width: u32, height: u32) -> Behind {
+        let made = small_enough(width, height);
+        let picture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("the film, small"),
+            size: wgpu::Extent3d {
+                width: made.0,
+                height: made.1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: BEHIND_FORMAT,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let picture = picture.create_view(&Default::default());
+        let read = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("the film behind a panel"),
+            layout: &self.behind_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&picture),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+        Behind {
+            picture,
+            read,
+            made,
         }
     }
 
@@ -595,6 +890,7 @@ impl Films {
             holes,
             blackout,
             curtain: over,
+            behind,
         } = showing;
         let placed = placement.filter(|placement| placement.opacity > 0.001);
         let film = placed.zip(self.resident.as_ref());
@@ -603,6 +899,12 @@ impl Films {
             return;
         }
         let (cut, corners, count) = Placed::cut(holes);
+        // Only with a film, only with a panel standing on it, and only once
+        // the panels are the ones that stand on black — a film that is a
+        // picture on the page has the wallpaper behind its panels and the
+        // toolkit's own glass is already showing it.
+        let behind = behind.clamp(0.0, 1.0);
+        let showing_behind = behind > 0.001 && count > 0.0 && film.is_some();
 
         if curtain {
             queue.write_buffer(
@@ -646,6 +948,65 @@ impl Films {
                 }),
             );
         }
+        if let Some((placement, resident)) = film.filter(|_| showing_behind) {
+            queue.write_buffer(
+                &self.shrink_buffer,
+                0,
+                bytemuck::bytes_of(&Shrinking {
+                    made: [resident.behind.made.0 as f32, resident.behind.made.1 as f32],
+                    planes: planes_of(resident.layout) as f32,
+                    nothing: 0.0,
+                    colour: resident.colour.rows,
+                }),
+            );
+            // The same quad the film is drawn as, so the panels read the
+            // picture off exactly the rectangle the film is standing in — the
+            // holes are measured on the window and the two cannot be worked
+            // out separately without coming apart as a film is opened.
+            queue.write_buffer(
+                &self.behind_buffer,
+                0,
+                bytemuck::bytes_of(&Placed {
+                    centre: placement.centre,
+                    half: placement.half,
+                    screen,
+                    opacity: placement.opacity,
+                    planes: planes_of(resident.layout) as f32,
+                    colour: resident.colour.rows,
+                    about: [
+                        placement.dim.clamp(0.0, 1.0),
+                        count,
+                        placement.radius.max(0.0),
+                        behind * TRANSMITTED,
+                    ],
+                    holes: cut,
+                    corners,
+                }),
+            );
+
+            // Laid down before the window's own pass begins, because a texture
+            // cannot be drawn into and read from in one pass.
+            let mut small = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("the film, small"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &resident.behind.picture,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            small.set_pipeline(&self.shrink);
+            small.set_bind_group(0, &self.shrinking, &[]);
+            small.set_bind_group(1, &resident.bind, &[]);
+            small.draw(0..6, 0..1);
+        }
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("film"),
@@ -682,7 +1043,33 @@ impl Films {
         pass.set_bind_group(0, &self.placing, &[]);
         pass.set_bind_group(1, &resident.bind, &[]);
         pass.draw(0..6, 0..1);
+
+        // And the film behind the panels last of all: it is the one thing here
+        // drawn *into* the holes rather than around them, so it goes down over
+        // a panel that is already whole.
+        if showing_behind {
+            pass.set_pipeline(&self.behind);
+            pass.set_bind_group(0, &self.behind_placing, &[]);
+            pass.set_bind_group(2, &resident.behind.read, &[]);
+            pass.draw(0..6, 0..1);
+        }
     }
+}
+
+/// How big the film is laid down for the panels standing over it.
+///
+/// **In the film's own proportion**, not a square: a texel of it has to come
+/// out the same size on the screen across as it is down, or a portrait film
+/// behind a panel is blurred further one way than the other and the smear
+/// reads as a picture somebody has stretched.
+///
+/// Never nought in either direction, because a texture of no width is not a
+/// texture — a film one pixel tall and four thousand wide is a thing that
+/// exists, and it is not worth a crash.
+fn small_enough(width: u32, height: u32) -> (u32, u32) {
+    let longer = width.max(height).max(1);
+    let shrunk = |edge: u32| (edge * BEHIND_EDGE).div_ceil(longer).clamp(1, BEHIND_EDGE);
+    (shrunk(width), shrunk(height))
 }
 
 /// How many of the three textures an arrangement really uses.
@@ -753,6 +1140,11 @@ struct Placed {
 @group(1) @binding(1) var blue: texture_2d<f32>;
 @group(1) @binding(2) var red: texture_2d<f32>;
 @group(1) @binding(3) var sampling: sampler;
+// The same film laid down small, in light, for the panels standing over it.
+// A group of its own rather than a fifth plane, because the pass that makes it
+// binds the planes while drawing into this one.
+@group(2) @binding(0) var behind_picture: texture_2d<f32>;
+@group(2) @binding(1) var behind_sampling: sampler;
 
 struct Drawn {
     @builtin(position) at: vec4<f32>,
@@ -761,12 +1153,16 @@ struct Drawn {
     @location(1) pixel: vec2<f32>,
 };
 
-fn place(index: u32) -> Drawn {
+fn corner_of(index: u32) -> vec2<f32> {
     var corners = array<vec2<f32>, 6>(
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
         vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
     );
-    let corner = corners[index];
+    return corners[index];
+}
+
+fn place(index: u32) -> Drawn {
+    let corner = corner_of(index);
     let pixel = placed.centre + corner * placed.half;
 
     var out: Drawn;
@@ -860,6 +1256,90 @@ fn to_light(value: f32) -> f32 {
     return pow((value + 0.055) / 1.055, 2.4);
 }
 
+/// How far the blur reaches past the pixel it belongs to, in window pixels.
+///
+/// The tent below is one texel of the small picture either side, and the
+/// sampler's own magnification carries it about half a texel further. It is
+/// worked out from what is bound rather than passed in, so that changing
+/// `BEHIND_EDGE` cannot leave the soft edge of the picture measured for the
+/// old one.
+fn behind_reach() -> f32 {
+    let made = max(vec2<f32>(textureDimensions(behind_picture)), vec2<f32>(1.0));
+    let texel = placed.half * 2.0 / made;
+    return max(texel.x, texel.y) * 1.5;
+}
+
+/// The film's own quad, grown by that reach.
+///
+/// **Grown, because the letterbox is part of the picture.** Where the film
+/// stops, a panel goes back to being plain stained glass, and a pane of glass
+/// does not show one half of itself out of focus and put a razor down the
+/// middle. The edge has to dissolve over the same width as everything else in
+/// the picture does, which means the fade straddles it — half of it outside
+/// the film, on ground the film's own quad never covers.
+@vertex
+fn behind_vs(@builtin(vertex_index) index: u32) -> Drawn {
+    let corner = corner_of(index);
+    let pixel = placed.centre + corner * (placed.half + vec2<f32>(behind_reach()));
+
+    var out: Drawn;
+    out.at = vec4<f32>(
+        pixel.x / placed.screen.x * 2.0 - 1.0,
+        1.0 - pixel.y / placed.screen.y * 2.0,
+        0.0,
+        1.0,
+    );
+    // The film's own nought to one, which runs a little past both ends over
+    // the ground the quad was grown on to. The sampler holds its edge there,
+    // and the fade has taken the picture to nothing by the time it matters.
+    out.uv = (pixel - placed.centre + placed.half) / max(placed.half * 2.0, vec2<f32>(1.0));
+    out.pixel = pixel;
+    return out;
+}
+
+/// The film behind the panels standing on it.
+///
+/// The same quad as the film, turned inside out: where the film leaves a hole
+/// this fills one, and everywhere else it does nothing at all. What comes out
+/// is premultiplied — the picture at the fraction the stain lets through, and
+/// that fraction as the alpha the panel underneath is taken back by. See
+/// `TRANSMITTED` for why it is that way round and not added.
+@fragment
+fn behind_fs(drawn: Drawn) -> @location(0) vec4<f32> {
+    // Inside a panel, and inside the film: what is behind a panel out over the
+    // letterbox is the letterbox, and nothing is added there. The film's edge
+    // is feathered over the width of the blur rather than the width of a
+    // pixel — see `behind_vs`.
+    let reach = behind_reach();
+    let edge = rounded(drawn.pixel - placed.centre, placed.half, placed.about.z);
+    let shown = (1.0 - smoothstep(-reach, reach, edge)) * covered(drawn.pixel);
+    if (shown <= 0.0) {
+        discard;
+    }
+    // Nine taps in a tent on a picture already several times smaller than the
+    // screen. The sampler's own magnification is most of the blur; the tent is
+    // what keeps the creases of a magnified texel out of a panel a yard wide.
+    // `textureSampleLevel` rather than `textureSample`, because the `discard`
+    // above means this is not reached by every pixel of the quad and a tap
+    // that needed neighbouring pixels to know its own size would be undefined.
+    let step = 1.0 / vec2<f32>(textureDimensions(behind_picture));
+    var light = vec3<f32>(0.0);
+    var total = 0.0;
+    for (var down = -1; down <= 1; down = down + 1) {
+        for (var across = -1; across <= 1; across = across + 1) {
+            let weight = (2.0 - abs(f32(across))) * (2.0 - abs(f32(down)));
+            let at = drawn.uv + vec2<f32>(f32(across), f32(down)) * step;
+            light = light + textureSampleLevel(
+                behind_picture, behind_sampling, at, 0.0).rgb * weight;
+            total = total + weight;
+        }
+    }
+    // How much of it the panel lets through, how much of the film is there at
+    // all, and how much light is left in the page under an open menu.
+    let through = placed.about.w * placed.opacity * placed.about.x * shown;
+    return vec4<f32>(light / total * through, through);
+}
+
 @fragment
 fn fs(drawn: Drawn) -> @location(0) vec4<f32> {
     let y = textureSample(luma, sampling, drawn.uv).r;
@@ -888,6 +1368,100 @@ fn fs(drawn: Drawn) -> @location(0) vec4<f32> {
     // black.
     let shown = inside(drawn.pixel) * (1.0 - covered(drawn.pixel));
     return vec4<f32>(light * placed.about.x, placed.opacity * shown);
+}
+"#;
+
+/// Laying the film down small.
+///
+/// A module of its own: it is the only pass here that draws into a texture
+/// rather than into the window, and the only one whose first bind group is
+/// what it is making rather than where the film goes.
+const SHRINK_SHADER: &str = r#"
+struct Shrinking {
+    // How many texels across and down the picture being made is.
+    made: vec2<f32>,
+    planes: f32,
+    nothing: f32,
+    colour0: vec4<f32>,
+    colour1: vec4<f32>,
+    colour2: vec4<f32>,
+};
+
+@group(0) @binding(0) var<uniform> shrinking: Shrinking;
+@group(1) @binding(0) var luma: texture_2d<f32>;
+@group(1) @binding(1) var blue: texture_2d<f32>;
+@group(1) @binding(2) var red: texture_2d<f32>;
+@group(1) @binding(3) var sampling: sampler;
+
+struct Made {
+    @builtin(position) at: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn shrink_vs(@builtin(vertex_index) index: u32) -> Made {
+    var corners = array<vec2<f32>, 6>(
+        vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
+        vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
+    );
+    let corner = corners[index];
+    var out: Made;
+    out.at = vec4<f32>(corner, 0.0, 1.0);
+    out.uv = vec2<f32>(corner.x * 0.5 + 0.5, corner.y * -0.5 + 0.5);
+    return out;
+}
+
+// The same curve the film's own pass takes off, for the same reason: what is
+// stored is not light, and a picture averaged before the curve came off would
+// be a picture averaged in the wrong space.
+fn to_light(value: f32) -> f32 {
+    if (value <= 0.04045) {
+        return value / 12.92;
+    }
+    return pow((value + 0.055) / 1.055, 2.4);
+}
+
+/// Sixteen taps covering exactly one texel of what is being made.
+///
+/// **Exactly one, not a radius somebody liked.** The sampler averages two
+/// texels by two of the film around each tap, so sixteen taps spread over one
+/// finished texel really do read the whole of the footprint that texel stands
+/// for. Fewer, or narrower, and what is left out comes back as a picture that
+/// crawls while the film runs: a blur made of samples that miss half of what
+/// they are averaging is a different blur every frame.
+@fragment
+fn shrink_fs(made: Made) -> @location(0) vec4<f32> {
+    let step = 1.0 / shrinking.made;
+    var stored = vec3<f32>(0.0);
+    for (var down = 0; down < 4; down = down + 1) {
+        for (var across = 0; across < 4; across = across + 1) {
+            let offset = (vec2<f32>(f32(across), f32(down)) + 0.5) * 0.25 - 0.5;
+            let at = made.uv + offset * step;
+            let y = textureSampleLevel(luma, sampling, at, 0.0).r;
+            var u: f32;
+            var v: f32;
+            if (shrinking.planes < 2.5) {
+                let both = textureSampleLevel(blue, sampling, at, 0.0).rg;
+                u = both.r;
+                v = both.g;
+            } else {
+                u = textureSampleLevel(blue, sampling, at, 0.0).r;
+                v = textureSampleLevel(red, sampling, at, 0.0).r;
+            }
+            stored = stored + vec3<f32>(y, u, v);
+        }
+    }
+    // Averaged as stored and converted once. The conversion is a matrix, so
+    // the two orders agree to the bit — and one of them is sixteen times the
+    // arithmetic.
+    stored = stored * (1.0 / 16.0);
+    let signal = vec3<f32>(
+        dot(shrinking.colour0.xyz, stored) + shrinking.colour0.w,
+        dot(shrinking.colour1.xyz, stored) + shrinking.colour1.w,
+        dot(shrinking.colour2.xyz, stored) + shrinking.colour2.w,
+    );
+    let held = clamp(signal, vec3<f32>(0.0), vec3<f32>(1.0));
+    return vec4<f32>(to_light(held.r), to_light(held.g), to_light(held.b), 1.0);
 }
 "#;
 
@@ -982,6 +1556,49 @@ mod tests {
         // and the holes would be read as somebody else's numbers.
         assert_eq!(std::mem::size_of::<Placed>(), 32 + 48 + 16 + 32 * HOLES);
         assert_eq!(std::mem::size_of::<Placed>() % 16, 0);
+    }
+
+    /// The picture the panels read is the film's own shape, small. A square
+    /// one would blur a portrait film further down the screen than across it,
+    /// and the smear behind the transport would read as a stretched picture.
+    #[test]
+    fn the_film_is_laid_down_small_in_its_own_proportion() {
+        for (width, height) in [(1920, 1080), (1080, 1920), (640, 480), (460, 816)] {
+            let (across, down) = small_enough(width, height);
+            assert_eq!(
+                across.max(down),
+                BEHIND_EDGE,
+                "{width}x{height} is not small"
+            );
+            let wanted = width as f32 / height as f32;
+            let got = across as f32 / down as f32;
+            assert!(
+                (got / wanted - 1.0).abs() < 0.02,
+                "{width}x{height} came out {across}x{down}, which is not its shape"
+            );
+        }
+    }
+
+    /// A film with an edge far shorter than a hundredth of its other one is a
+    /// thing that exists — a strip of titles, a picture a decoder got wrong —
+    /// and a texture of no width is not a texture.
+    #[test]
+    fn no_film_is_laid_down_at_nothing_across() {
+        assert_eq!(small_enough(4000, 1), (BEHIND_EDGE, 1));
+        assert_eq!(small_enough(1, 4000), (1, BEHIND_EDGE));
+        assert_eq!(small_enough(0, 0), (1, 1));
+        // And nothing is ever laid down larger than it was asked to be.
+        let (across, down) = small_enough(64, 48);
+        assert!(across <= BEHIND_EDGE && down <= BEHIND_EDGE);
+    }
+
+    #[test]
+    fn the_shrinking_uniform_is_the_size_the_shader_says() {
+        // Two floats of size and two more to see the colour on to a sixteen,
+        // then three rows of it. A scalar out of place here would be a film
+        // laid down small in somebody else's colours.
+        assert_eq!(std::mem::size_of::<Shrinking>(), 16 + 48);
+        assert_eq!(std::mem::size_of::<Shrinking>() % 16, 0);
     }
 
     #[test]

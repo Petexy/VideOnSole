@@ -148,13 +148,25 @@ metainfo_name="$(awk 'match($0, /<name>[^<]+<\/name>/) {
         exit
     }' "$PROJECT_ROOT/data/io.github.petexy.videonsole.metainfo.xml")"
 # This application draws its own window rather than taking one from `lxb-app`,
-# so the name it opens under is its own constant instead of an argument.
-window_names="$(grep -oE '^const TITLE: &str = "[^"]*";' "$PROJECT_ROOT/src/main.rs" \
-    | sed -e 's/^.*= "//' -e 's/";$//' | sort -u)"
+# so the name it opens under is its own. Since it was translated that name is a
+# *message* rather than a constant, so the id is read out of the source and the
+# word out of `en-GB.ftl` — the fallback catalogue, which is the language the
+# desktop entry's own untranslated `Name=` is in. Comparing against any other
+# catalogue would be comparing two languages and failing every time.
+window_title_id="$(grep -oE 'with_title\(crate::i18n::text\("[^"]*"\)\)' \
+    "$PROJECT_ROOT/src/main.rs" | sed -e 's/^.*text("//' -e 's/")).*$//' | sort -u)"
+[[ -n "$window_title_id" ]] \
+    || package_die "src/main.rs names no window title message"
+[[ "$(printf '%s\n' "$window_title_id" | wc -l)" -eq 1 ]] \
+    || package_die "src/main.rs opens windows under more than one message:
+$window_title_id"
+window_names="$(awk -v id="$window_title_id" \
+    '$1 == id && $2 == "=" { sub(/^[^=]*= /, ""); print; exit }' \
+    "$PROJECT_ROOT/locales/en-GB.ftl")"
 [[ -n "$desktop_name" ]] || package_die "the desktop entry has no Name="
 [[ -n "$metainfo_name" ]] || package_die "the metainfo has no <name>"
 [[ -n "$window_names" ]] \
-    || package_die "src/main.rs declares no window title (const TITLE)"
+    || package_die "locales/en-GB.ftl has no $window_title_id, which is the message src/main.rs opens its window under"
 [[ "$(printf '%s\n' "$window_names" | wc -l)" -eq 1 ]] \
     || package_die "src/main.rs opens windows under more than one name:
 $window_names"

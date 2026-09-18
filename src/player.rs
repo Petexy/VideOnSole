@@ -872,7 +872,7 @@ fn run(
         let picture = input
             .streams()
             .best(ffmpeg::media::Type::Video)
-            .ok_or_else(|| String::from("There is no picture in this file"))?;
+            .ok_or_else(|| String::from(crate::i18n::text("no-video-stream")))?;
         (
             picture.index(),
             picture.time_base(),
@@ -1272,8 +1272,8 @@ fn seek(
 
 fn said(err: &ffmpeg::Error) -> String {
     match err {
-        ffmpeg::Error::InvalidData => String::from("This file cannot be played"),
-        _ => format!("This film cannot be played: {err}"),
+        ffmpeg::Error::InvalidData => String::from(crate::i18n::text("file-cannot-play")),
+        _ => crate::message!("film-cannot-be-played", "why" => err.to_string()),
     }
 }
 
@@ -1293,7 +1293,7 @@ fn stream_name(stream: &ffmpeg::Stream, number: usize) -> String {
         (Some(title), Some(language)) => format!("{title} ({language})"),
         (Some(title), None) => title.to_string(),
         (None, Some(language)) => language.to_string(),
-        (None, None) => format!("Track {}", number + 1),
+        (None, None) => crate::message!("track-number", "number" => number + 1),
     }
 }
 
