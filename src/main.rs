@@ -21,6 +21,7 @@
 //! reading films for their poster frames; and the two the sound device and the
 //! controller library keep for themselves.
 
+mod demo;
 mod draw;
 mod facts;
 mod film;
@@ -99,14 +100,22 @@ fn main() {
     }
 }
 
-/// Where to open, from the arguments or from the user's own videos.
-fn opening(arguments: &[String]) -> PathBuf {
-    arguments
+/// Where to open: the made-up folder, what was named on the command line, or
+/// the user's own videos.
+///
+/// `except` is the file `--shot` is going to write. It is a path on the
+/// command line that is not a folder to open, and it is the only one.
+fn opening(arguments: &[String], except: Option<&str>) -> Result<PathBuf, String> {
+    if arguments.iter().any(|one| one == "--demo") {
+        return demo::folder();
+    }
+    Ok(arguments
         .iter()
+        .filter(|one| Some(one.as_str()) != except)
         .find(|one| !one.starts_with('-'))
         .map(PathBuf::from)
         .filter(|path| path.exists())
-        .unwrap_or_else(library::default_folder)
+        .unwrap_or_else(library::default_folder))
 }
 
 fn window(arguments: &[String]) -> Result<(), String> {
@@ -120,7 +129,7 @@ fn window(arguments: &[String]) -> Result<(), String> {
 
     let event_loop = EventLoop::new().map_err(|err| err.to_string())?;
     event_loop.set_control_flow(ControlFlow::Poll);
-    let mut application = Application::new(opening(arguments), theme, wallpaper);
+    let mut application = Application::new(opening(arguments, None)?, theme, wallpaper);
     event_loop
         .run_app(&mut application)
         .map_err(|err| err.to_string())
@@ -717,13 +726,7 @@ fn shot(path: &str, arguments: &[String]) -> Result<(), String> {
     let mut captions = Captions::new(&ui.device, &ui.queue, SHOT);
     let mut posters = Posters::new();
 
-    let at = arguments
-        .iter()
-        .skip(1)
-        .find(|one| !one.starts_with('-') && *one != path)
-        .map(PathBuf::from)
-        .filter(|path| path.exists())
-        .unwrap_or_else(library::default_folder);
+    let at = opening(arguments, Some(path))?;
     let mut view = View::new(&at, Order::default(), false);
     if let Some(row) = named("--row").and_then(|value| value.parse::<usize>().ok()) {
         view.cursor = row.min(view.folder.entries.len().saturating_sub(1));
@@ -1070,6 +1073,7 @@ fn controllers() {
 
 const HELP: &str = "\
 usage: videonsole [FILE-OR-FOLDER]
+       videonsole --demo
        videonsole --shot FILE [FOLDER] [--width N] [--height N]
                   [--play] [--back] [--details] [--menu] [--row N]
                   [--at SECONDS] [--after SECONDS] [--then WHAT]
@@ -1107,10 +1111,15 @@ Where you left off is remembered, and offered again the next time that film is
 opened. A film watched to its end is forgotten rather than remembered at its
 credits.
 
+--demo opens a made-up folder of films, drawn into this application's own
+cache. Nothing of yours is read and nothing of yours is written. It is what
+the pictures in the README were taken against.
+
 --shot writes one settled frame to a PNG with no display at all, through the
 same renderer and the same film and subtitle passes the window uses.
 
 VIDEONSOLE_HWACCEL=off  decode in software, whatever this machine can do
+--demo         a made-up folder of films; nothing of yours is touched
 --controllers  list what this machine can be driven with
 --version      print the version
 --help         print this message";
