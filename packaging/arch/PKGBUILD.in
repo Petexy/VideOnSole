@@ -30,7 +30,9 @@ depends=('glibc' 'gcc-libs' 'wayland' 'libxkbcommon' 'libglvnd' 'systemd-libs'
 # that has never heard of the toolkit. It is versioned all the same — this is
 # built against one release of the language, not against whichever is lying
 # about.
-makedepends=('cargo' 'pkgconf' 'alsa-lib' 'ffmpeg' 'lxb-toolkit>=@TOOLKIT_VERSION@')
+# clang is bindgen's, which writes the FFmpeg bindings from its headers at
+# build time.
+makedepends=('cargo' 'pkgconf' 'clang' 'alsa-lib' 'ffmpeg' 'lxb-toolkit>=@TOOLKIT_VERSION@')
 optdepends=('vulkan-icd-loader: draw through Vulkan rather than the EGL fallback'
             'pipewire-pulse: the interface sounds and the film soundtrack'
             'libva-mesa-driver: decode films on the graphics card rather than the processor'

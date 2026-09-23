@@ -5,7 +5,7 @@ driven by a controller. It is shown as *Videos*.**
 
 [![Licence](https://img.shields.io/badge/licence-GPL--3.0--only-blue)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.9.0-informational)](VERSION)
-[![Rust](https://img.shields.io/badge/rust-1.87%2B-orange)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/rust-1.90%2B-orange)](Cargo.toml)
 
 ![A folder](docs/folder.png)
 
@@ -114,7 +114,7 @@ the application is driven by.
 
 ## Install
 
-Rust 1.87 or newer, and the **lxb-toolkit development component** —
+Rust 1.90 or newer, and the **lxb-toolkit development component** —
 `Cargo.toml` names its crate sources at `/usr/share/lxb-toolkit/crates`, and
 cargo compiles them into this binary, so nothing of the toolkit is linked at
 run time. Beside that: **ffmpeg** and **alsa-lib** with their development

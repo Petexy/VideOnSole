@@ -28,6 +28,23 @@ Everything lands in `packaging/out`. The build directory defaults to
 whose locked graph is several hundred crates. Point it elsewhere with
 `--work-dir DIR` or `VIDEONSOLE_WORK_DIR`.
 
+On Debian and Fedora the toolkit's development package goes in first — it is
+in neither archive, so it comes from the toolkit's own `./packaging/build.sh
+debian` or `fedora`. After that, the Debian builder checks everything else it
+needs before compiling and names whatever is missing in one `apt install` line,
+with Rust as `rustup` because Debian 13's own is older than the locked graph
+allows. It compiles into `target/debian` rather than `target/`, so a build in a
+container that shares the checkout never replaces the host's own binaries. On
+Fedora the spec says what to install:
+
+```sh
+sudo dnf install rpm-build dnf5-plugins git-core
+sudo dnf builddep packaging/fedora/videonsole.spec
+```
+
+A distrobox or toolbox container on a plain `debian` or `fedora` image is
+enough for either.
+
 ## The toolkit is a build dependency
 
 This is the thing about the package that looks like a mistake and is not.
