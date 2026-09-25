@@ -533,6 +533,7 @@ impl Application {
             elapsed,
             &self.accent,
             self.theme.wallpaper,
+            self.theme.particles,
             self.theme.icons,
         );
 
@@ -799,6 +800,7 @@ fn shot(path: &str, arguments: &[String]) -> Result<(), String> {
             6.0,
             &accent,
             theme.wallpaper,
+            theme.particles,
             theme.icons,
         );
         let geometry = Geometry::of(

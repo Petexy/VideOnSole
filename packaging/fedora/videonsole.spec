@@ -1,5 +1,5 @@
 Name:           videonsole
-Version:        0.9.0
+Version:        0.9.1
 Release:        1%{?dist}
 Summary:        A film browser and player in the LineXinBar design language, shown as Videos
 
@@ -30,7 +30,7 @@ BuildRequires:  libappstream-glib
 # The design language, as Rust sources. It is a build dependency and not a
 # runtime one: `lxb-render` is a path dependency, so cargo compiles it into
 # this binary and the finished program links no liblxb_*.so at all.
-BuildRequires:  lxb-toolkit-devel >= 0.9.0
+BuildRequires:  lxb-toolkit-devel >= 0.9.1
 # What the program links outright, each asked for as a pkg-config name, which
 # is what the Rust bindings look for: ALSA for the interface sounds, libudev
 # for the game controllers and xkbcommon for the keyboard.
@@ -156,6 +156,17 @@ appstream-util validate-relax --nonet \
 %{_metainfodir}/io.github.petexy.videonsole.metainfo.xml
 
 %changelog
+* Thu Sep 24 2026 Piotr Lewandowski <piotr.petexy@gmail.com> - 0.9.1-1
+- Released with LineXinBar 0.9.1. Ten languages, with the month and the clock
+  written the way each of them writes them.
+- The head bar and the transport over a playing film are glass over the film
+  rather than panels lit in the shell's accent.
+- The wallpaper carries the shell's sparkles and follows Theme > Particles.
+- A flake at the root, so the Nix target has something to build; a demo folder
+  of films to photograph; and package builds that say what they lack.
+- Requires lxb-toolkit 0.9.1 to build: Ui::begin takes the particles argument
+  there, and not in 0.9.0.
+
 * Mon Aug 31 2026 Piotr Lewandowski <piotr.petexy@gmail.com> - 0.9.0-1
 - First packaged release. A folder of films and one film at a time, in the
   LineXinBar design language.

@@ -1,6 +1,6 @@
 [package]
 name = "videonsole"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2021"
 rust-version = "1.90"
 license = "GPL-3.0-only"
@@ -13,7 +13,7 @@ repository = "https://github.com/Petexy/videonsole"
 # The design language itself: colour, material, motion, type, metrics, marks
 # and what a control means — the words the file question says among them. Every
 # value this application draws is asked of it by name.
-lxb-toolkit = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-toolkit" }
+lxb-toolkit = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-toolkit" }
 
 # The renderer that answers those names with the real material — the glass, the
 # wallpaper behind it, the marks as beads of water, the context menu, the
@@ -27,15 +27,15 @@ lxb-toolkit = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-too
 # second at their own resolution, so the frame is composed by `lxb-render` as
 # everywhere else and the film is drawn over it in a pass of this
 # application's own.
-lxb-render = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-render" }
+lxb-render = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-render" }
 
 # Every controller on the machine and the keyboard, as one list of actions.
-lxb-input = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-input", features = [
+lxb-input = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-input", features = [
     "winit",
 ] }
 
 # The shell's own recordings, at the rests the language keeps.
-lxb-sound = { version = "0.9.0", path = "/usr/share/lxb-toolkit/crates/lxb-sound" }
+lxb-sound = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-sound" }
 
 # Read directly for one thing only: how far the triggers are pulled. An action
 # says a thing happened and a trigger says how far, and scanning through a film
