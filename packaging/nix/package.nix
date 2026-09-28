@@ -13,6 +13,8 @@
   # not in `openedAtRuntime`.
   ffmpeg,
   alsa-lib,
+  # gilrs's libudev-sys needs libudev.pc on the pkg-config path in the sandbox.
+  udev,
   # The design language, as a derivation. It is a *build* dependency and not a
   # runtime one: `lxb-render` is a Rust path dependency, so cargo compiles those
   # sources into this binary and nothing of the toolkit is referenced once it
@@ -63,8 +65,11 @@ rustPlatform.buildRustPackage {
   cargoLock.lockFile = "${cleanSrc}/Cargo.lock";
 
   strictDeps = true;
-  nativeBuildInputs = [ pkg-config makeWrapper ];
-  buildInputs = openedAtRuntime ++ [ ffmpeg alsa-lib ];
+  # bindgenHook sets LIBCLANG_PATH (and BINDGEN_EXTRA_CLANG_ARGS) in the
+  # sandbox — bindgen, reached through ffmpeg-sys-next, otherwise panics with
+  # "Unable to find libclang".
+  nativeBuildInputs = [ pkg-config makeWrapper rustPlatform.bindgenHook ];
+  buildInputs = openedAtRuntime ++ [ ffmpeg alsa-lib udev ];
 
   # Cargo.toml names the toolkit's crates at /usr/share, which is where every
   # other distribution here puts them and is nowhere at all under Nix. This is
@@ -85,12 +90,18 @@ rustPlatform.buildRustPackage {
   installPhase = ''
     runHook preInstall
 
-    # install.sh reads the release directory of a target dir; buildRustPackage
-    # builds under a target triple, so point it at the parent of that.
+    # install.sh reads the release directory of a target dir. The cargo hooks
+    # pass --target, so the real artifacts live under the triple dir; cargo
+    # still creates an empty-ish target/release for package/check side
+    # outputs, so detect by the binary's presence rather than by directory
+    # name or glob order.
     targetDir="target"
-    if [ ! -d "target/release" ]; then
-      targetDir="$(dirname "$(dirname "$(readlink -f target/*/release)")")"
-    fi
+    for d in target/*/release target/release; do
+      if [ -e "$d/videonsole" ]; then
+        targetDir="$(dirname "$d")"
+        break
+      fi
+    done
 
     bash packaging/install.sh \
       --destdir "$out" \
