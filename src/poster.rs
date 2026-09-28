@@ -533,7 +533,7 @@ fn md5_hex(data: &[u8]) -> String {
     message.extend_from_slice(&length.to_le_bytes());
 
     let mut state: [u32; 4] = [0x6745_2301, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476];
-    for block in message.chunks_exact(64) {
+    for block in message.as_chunks::<64>().0 {
         let words: [u32; 16] = std::array::from_fn(|index| {
             u32::from_le_bytes(block[index * 4..index * 4 + 4].try_into().unwrap_or([0; 4]))
         });

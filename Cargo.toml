@@ -1,6 +1,6 @@
 [package]
 name = "videonsole"
-version = "0.9.1"
+version = "0.9.2"
 edition = "2021"
 rust-version = "1.90"
 license = "GPL-3.0-only"
@@ -13,7 +13,7 @@ repository = "https://github.com/Petexy/videonsole"
 # The design language itself: colour, material, motion, type, metrics, marks
 # and what a control means — the words the file question says among them. Every
 # value this application draws is asked of it by name.
-lxb-toolkit = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-toolkit" }
+lxb-toolkit = { version = "0.9.2", path = "/usr/share/lxb-toolkit/crates/lxb-toolkit" }
 
 # The renderer that answers those names with the real material — the glass, the
 # wallpaper behind it, the marks as beads of water, the context menu, the
@@ -27,23 +27,26 @@ lxb-toolkit = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-too
 # second at their own resolution, so the frame is composed by `lxb-render` as
 # everywhere else and the film is drawn over it in a pass of this
 # application's own.
-lxb-render = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-render" }
+lxb-render = { version = "0.9.2", path = "/usr/share/lxb-toolkit/crates/lxb-render" }
 
 # Every controller on the machine and the keyboard, as one list of actions.
-lxb-input = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-input", features = [
+lxb-input = { version = "0.9.2", path = "/usr/share/lxb-toolkit/crates/lxb-input", features = [
     "winit",
 ] }
 
 # The shell's own recordings, at the rests the language keeps.
-lxb-sound = { version = "0.9.1", path = "/usr/share/lxb-toolkit/crates/lxb-sound" }
+lxb-sound = { version = "0.9.2", path = "/usr/share/lxb-toolkit/crates/lxb-sound" }
 
 # Read directly for one thing only: how far the triggers are pulled. An action
 # says a thing happened and a trigger says how far, and scanning through a film
 # is the one control here that wants the second. `lxb-input` reads this same
 # crate and stays the only thing that decides what any *button* means — see
-# `src/pad.rs`. Pinned to the version `lxb-input` asks for, so there is one
-# copy in the binary.
-gilrs = "0.11.2"
+# `src/pad.rs`. Taken from the toolkit's own copy, the one `lxb-input` reads,
+# so there is one copy in the binary and it is the one that reads a pad turned
+# off and on again: the published GilRs left the second of two hot-plug events
+# unread, and a pad and the shell's copy of it always go together. See the
+# toolkit's `third_party/lxb-gilrs-core/README.LXB.md`.
+gilrs = { package = "lxb-gilrs", version = "0.11.2", path = "/usr/share/lxb-toolkit/crates/lxb-gilrs" }
 
 # The film: demuxing it, decoding it, turning its frames into the pixels a
 # texture wants and its samples into the ones a sound card wants.

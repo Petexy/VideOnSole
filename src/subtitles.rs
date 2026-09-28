@@ -177,12 +177,14 @@ fn decode(bytes: &[u8]) -> String {
 
 fn utf16(bytes: &[u8], big_endian: bool) -> String {
     let units: Vec<u16> = bytes
-        .chunks_exact(2)
-        .map(|pair| {
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&pair| {
             if big_endian {
-                u16::from_be_bytes([pair[0], pair[1]])
+                u16::from_be_bytes(pair)
             } else {
-                u16::from_le_bytes([pair[0], pair[1]])
+                u16::from_le_bytes(pair)
             }
         })
         .collect();
@@ -591,6 +593,16 @@ impl Captions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file marked as UTF-16 is read in the order its mark says, and a
+    /// stray byte at the end of one — half a character — is left out rather
+    /// than read as a character of its own.
+    #[test]
+    fn utf16_is_read_in_the_order_its_mark_says() {
+        assert_eq!(decode(&[0xFF, 0xFE, b'H', 0, 0xE9, 0]), "Hé");
+        assert_eq!(decode(&[0xFE, 0xFF, 0, b'H', 0, 0xE9]), "Hé");
+        assert_eq!(decode(&[0xFF, 0xFE, b'H', 0, b'i', 0, b'!']), "Hi");
+    }
 
     #[test]
     fn subrip_is_read() {
