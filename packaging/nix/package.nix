@@ -13,7 +13,8 @@
   # not in `openedAtRuntime`.
   ffmpeg,
   alsa-lib,
-  # gilrs's libudev-sys needs libudev.pc on the pkg-config path in the sandbox.
+  # How the controllers are found: the toolkit's GilRs fork reaches libudev
+  # through libudev-sys, whose build script asks pkg-config for it.
   udev,
   # The design language, as a derivation. It is a *build* dependency and not a
   # runtime one: `lxb-render` is a Rust path dependency, so cargo compiles those
@@ -65,9 +66,9 @@ rustPlatform.buildRustPackage {
   cargoLock.lockFile = "${cleanSrc}/Cargo.lock";
 
   strictDeps = true;
-  # bindgenHook sets LIBCLANG_PATH (and BINDGEN_EXTRA_CLANG_ARGS) in the
-  # sandbox — bindgen, reached through ffmpeg-sys-next, otherwise panics with
-  # "Unable to find libclang".
+  # FFmpeg's Rust bindings are generated at build time, and bindgen needs to
+  # be told where libclang and the C headers are; without the hook it panics
+  # with "Unable to find libclang". Arch's recipe has clang for the same reason.
   nativeBuildInputs = [ pkg-config makeWrapper rustPlatform.bindgenHook ];
   buildInputs = openedAtRuntime ++ [ ffmpeg alsa-lib udev ];
 
@@ -91,10 +92,10 @@ rustPlatform.buildRustPackage {
     runHook preInstall
 
     # install.sh reads the release directory of a target dir. The cargo hooks
-    # pass --target, so the real artifacts live under the triple dir; cargo
-    # still creates an empty-ish target/release for package/check side
-    # outputs, so detect by the binary's presence rather than by directory
-    # name or glob order.
+    # build with --target, so the binary is in target/<triple>/release;
+    # target/release exists as well, holding the build scripts cargo ran for
+    # the host, so the target dir is whichever one the binary is in rather
+    # than whichever one exists.
     targetDir="target"
     for d in target/*/release target/release; do
       if [ -e "$d/videonsole" ]; then

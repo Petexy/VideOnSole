@@ -1,5 +1,5 @@
 Name:           videonsole
-Version:        0.9.2
+Version:        0.9.3
 Release:        1%{?dist}
 Summary:        A film browser and player in the LineXinBar design language, shown as Videos
 
@@ -30,7 +30,7 @@ BuildRequires:  libappstream-glib
 # The design language, as Rust sources. It is a build dependency and not a
 # runtime one: `lxb-render` is a path dependency, so cargo compiles it into
 # this binary and the finished program links no liblxb_*.so at all.
-BuildRequires:  lxb-toolkit-devel >= 0.9.2
+BuildRequires:  lxb-toolkit-devel >= 0.9.3
 # What the program links outright, each asked for as a pkg-config name, which
 # is what the Rust bindings look for: ALSA for the interface sounds, libudev
 # for the game controllers and xkbcommon for the keyboard.
@@ -156,6 +156,14 @@ appstream-util validate-relax --nonet \
 %{_metainfodir}/io.github.petexy.videonsole.metainfo.xml
 
 %changelog
+* Tue Sep 29 2026 Piotr Lewandowski <piotr.petexy@gmail.com> - 0.9.3-1
+- Released with LineXinBar 0.9.3. A playing film keeps the screen lit and the
+  machine awake through lxb-toolkit's Awake, which also asks the portal from
+  inside a Flatpak; zbus is no longer a dependency.
+- Follows low-end hardware mode, opens on a machine without a Vulkan driver
+  through OpenGL, and closes the interface's sound output when quiet.
+- Requires lxb-toolkit 0.9.3 to build.
+
 * Sun Sep 27 2026 Piotr Lewandowski <piotr.petexy@gmail.com> - 0.9.2-1
 - Released with LineXinBar 0.9.2. A controller that is switched off and on
   again is read again: the triggers it scans a film with, and every other

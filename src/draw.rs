@@ -1056,6 +1056,7 @@ fn details(
     // every moment of the animation, so it is asked for rather than worked out
     // here and the two cannot disagree: see `View::details_pane`.
     let rect = view.details_pane(geometry);
+    let before = ui.written();
     panel(ui, rect, view.on_black());
 
     let padding = ui.m(Metric::PanelPadding);
@@ -1063,12 +1064,50 @@ fn details(
     let inner = (rect[2] - padding * 2.0).max(1.0);
     let left = rect[0] + padding;
 
+    // Standing on its side the pane is a sheet as wide as the page, and each
+    // line of it is a caption and its value side by side — a table rather
+    // than a column of pairs, so that the sheet leaves the film most of the
+    // window. The captions stand in a column as wide as the widest of them in
+    // the language being read. See `Geometry::details_sheet`, which is
+    // measured for exactly this.
+    let across = geometry.stands_on_its_side();
+    let caption_w = if across {
+        crate::view::DETAIL_CAPTIONS
+            .iter()
+            .map(|key| ui.measure(Text::Caption, crate::i18n::text(key)))
+            .fold(0.0, f32::max)
+    } else {
+        0.0
+    };
+    let beside = if across { ui.m(Metric::Gap) * 2.0 } else { 0.0 };
+    let value_x = left + caption_w + beside;
+    let value_w = (inner - caption_w - beside).max(1.0);
+
     let say = |ui: &mut Ui, at: &mut f32, label: &str, value: &str| {
         if value.is_empty() {
             return;
         }
         let caption = ui.line(Text::Caption);
         let body = ui.line(Text::Body);
+        if across {
+            let value = fit_text(ui, Text::Body, value, value_w);
+            ui.label(
+                [left, *at, caption_w, body],
+                Text::Caption,
+                label,
+                Role::TextSoft,
+                Align::Left,
+            );
+            ui.label(
+                [value_x, *at, value_w, body],
+                Text::Body,
+                &value,
+                Role::Text,
+                Align::Left,
+            );
+            *at += body + ui.s(crate::view::DETAIL_ROW_GAP);
+            return;
+        }
         ui.label(
             [left, *at, inner, caption],
             Text::Caption,
@@ -1087,7 +1126,7 @@ fn details(
         *at += body + ui.s(14.0);
     };
 
-    let name = fit_text(ui, Text::Body, &entry.name, inner);
+    let name = fit_text(ui, Text::Body, &entry.name, value_w);
     say(ui, &mut at, crate::i18n::text("name"), &name);
 
     // What the player knows first, and what was read off the file before it —
@@ -1146,8 +1185,18 @@ fn details(
         .parent()
         .map(|path| path.display().to_string())
         .unwrap_or_default();
-    let folder = cut_from_the_front(ui, &folder, inner);
+    let folder = cut_from_the_front(ui, &folder, value_w);
     say(ui, &mut at, crate::i18n::text("folder"), &folder);
+
+    // Standing on its side the pane is a sheet rising out from behind the
+    // transport, so what of it has not risen yet is behind the transport and
+    // is not drawn — rather than a sheet sliding up across the controls and
+    // the row of hints on its way. The hole is left whole: nothing of the film
+    // is ever below the transport's edge for it to matter there.
+    if geometry.stands_on_its_side() {
+        let edge = geometry.transport_at()[1] - geometry.gap;
+        ui.cut_between(before, ui.written(), [0.0, 0.0, geometry.window[0], edge]);
+    }
 
     hole_for(ui, rect)
 }

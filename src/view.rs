@@ -1601,12 +1601,28 @@ impl View {
     /// **One sum, read twice**: `draw::details` puts the pane here and
     /// [`View::stands_aside`] stands clear of it. Two answers drift, and the
     /// drift is a film drawn over a pane nobody can read.
+    ///
+    /// On a window standing on its side a pane down the right-hand side would
+    /// leave the film a strip beside it, and its own lines cut off by the edge
+    /// of the window, so there the details are a sheet across the foot of the
+    /// stage instead: as wide as the page, as tall as what it says, rising out
+    /// from behind the transport — and the film steps up out of its way rather
+    /// than aside. See [`Geometry::stands_on_its_side`].
     pub fn details_pane(&self, geometry: &Geometry) -> [f32; 4] {
-        let width = self.info_width(geometry);
         // Down to the transport and no further. The two used to overlap by the
         // whole height of the band, which nobody saw while the transport was a
         // card of glass and everybody sees now that both are panes.
         let bottom = geometry.transport_at()[1] - geometry.gap;
+        if geometry.stands_on_its_side() {
+            let height = geometry.details_sheet();
+            return [
+                geometry.margin,
+                bottom - height * self.info_out,
+                (geometry.window[0] - geometry.margin * 2.0).max(1.0),
+                height,
+            ];
+        }
+        let width = self.info_width(geometry);
         [
             geometry.window[0] - (geometry.margin + width) * self.info_out,
             geometry.head,
@@ -1887,6 +1903,25 @@ fn step_now(held_for: f32) -> f64 {
         .unwrap_or(STEPS[0].1)
 }
 
+/// The captions of every line the details pane can say, in the order it says
+/// them — the calls to `say` in `draw::details`. The sheet a window standing on
+/// its side gets is measured for all of them, and the column its captions stand
+/// in is as wide as the widest of them in the language being read. See
+/// [`Geometry::details_sheet`].
+pub const DETAIL_CAPTIONS: [&str; 8] = [
+    "name",
+    "picture",
+    "length",
+    "on-disk",
+    "decoded-by",
+    "sound",
+    "written",
+    "folder",
+];
+
+/// The air between two lines of the details sheet, in reference pixels.
+pub const DETAIL_ROW_GAP: f32 = 12.0;
+
 /// Where everything on the page goes, worked out from the window alone.
 #[derive(Debug, Clone, Copy)]
 pub struct Geometry {
@@ -1972,6 +2007,36 @@ impl Geometry {
             (self.window[0] - self.margin * 2.0).max(1.0),
             (self.window[1] - self.head - self.foot).max(1.0),
         ]
+    }
+
+    /// Whether the window is taller than it is wide: a display standing on
+    /// its side, or a window made that shape.
+    ///
+    /// Everything here is drawn at a size the window's *height* decides, so a
+    /// window this shape has a great deal less width for it than a page was
+    /// laid out for. Only the one thing that stood beside the film — the
+    /// details — is laid out differently for it; the wall of films is one
+    /// column wide there already, and the player is the film and a band of
+    /// controls at any shape.
+    pub fn stands_on_its_side(&self) -> bool {
+        self.window[1] > self.window[0]
+    }
+
+    /// How tall the details sheet is on a window standing on its side: every
+    /// line the pane can say and the padding round them, measured the way
+    /// `draw::details` writes them there — a caption and its value side by
+    /// side on one line, a table rather than the column of pairs the side pane
+    /// is, which is half the height and leaves the film most of the window.
+    ///
+    /// Room for every line whether or not each has anything in it yet, so the
+    /// film does not move again when the player gets round to saying what
+    /// decoded it.
+    pub fn details_sheet(&self) -> f32 {
+        let height = self.window[1];
+        let line = Text::Body.on(height) * Text::LINE;
+        let between = DETAIL_ROW_GAP * lxb_toolkit::metrics::scale_for(height);
+        let padding = Metric::PanelPadding.on(height);
+        DETAIL_CAPTIONS.len() as f32 * (line + between) - between + padding * 2.0
     }
 
     /// Where the transport sits: a band above the legend, across the page.
@@ -2165,6 +2230,13 @@ impl View {
     fn stands_aside(&self, geometry: &Geometry) -> [f32; 4] {
         let mut stage = geometry.viewport();
         stage[3] = (stage[3] - self.transport_room).max(1.0);
+        // Standing on its side, the details are a sheet across the foot of the
+        // stage, and the stage gives up that much of its height instead.
+        if geometry.stands_on_its_side() {
+            let sheet = (geometry.details_sheet() + geometry.gap) * self.info_out;
+            stage[3] = (stage[3] - sheet).max(1.0);
+            return stage;
+        }
         // The details take a pane down the right-hand side, and the stage
         // gives up exactly that much — never overlapping it at any moment of
         // the animation, because a pane under a film is a pane nobody can
@@ -3056,6 +3128,79 @@ mod tests {
                 stage[0] + stage[2],
                 pane[0]
             );
+        }
+    }
+
+    /// The geometry the player builds for a window this size, at the scale the
+    /// toolkit gives its height.
+    fn geometry_for(width: f32, height: f32) -> Geometry {
+        let scale = lxb_toolkit::metrics::scale_for(height);
+        Geometry::of(
+            [width, height],
+            |value| value * scale,
+            Metric::Gap.on(height),
+        )
+    }
+
+    /// On a window standing on its side the details are a sheet across the
+    /// foot of the stage: as wide as the page, standing on the transport once
+    /// it is out, and the film steps up clear of it at every moment of the way
+    /// there rather than aside into a strip.
+    #[test]
+    fn standing_on_its_side_the_details_are_a_sheet_the_film_stands_above() {
+        for (width, height) in [(1080.0, 1920.0), (800.0, 1280.0), (620.0, 1473.0)] {
+            let geometry = geometry_for(width, height);
+            assert!(geometry.stands_on_its_side());
+            let mut view = watching();
+            view.window = geometry.window;
+            view.transport_room = geometry.transport + geometry.gap;
+            view.info = true;
+            for step in 0..=20 {
+                view.info_out = step as f32 / 20.0;
+                let stage = view.stands_aside(&geometry);
+                let pane = view.details_pane(&geometry);
+                assert!(
+                    stage[1] + stage[3] <= pane[1] + 0.01,
+                    "{width}x{height} at {}: the stage reaches {} and the sheet starts at {}",
+                    view.info_out,
+                    stage[1] + stage[3],
+                    pane[1]
+                );
+                assert_eq!(pane[2], geometry.viewport()[2], "as wide as the page");
+            }
+            let pane = view.details_pane(&geometry);
+            let edge = geometry.transport_at()[1] - geometry.gap;
+            assert!((pane[1] + pane[3] - edge).abs() < 0.01, "on the transport");
+            // And the film is left a real share of the window, not a strip.
+            let stage = view.stands_aside(&geometry);
+            assert!(
+                stage[3] > height * 0.2,
+                "{width}x{height}: {} left for the film",
+                stage[3]
+            );
+        }
+    }
+
+    /// A landscape window keeps its pane down the right-hand side, exactly
+    /// where it always was.
+    #[test]
+    fn a_landscape_window_keeps_the_details_down_the_side() {
+        for (width, height) in [
+            (1280.0, 800.0),
+            (1600.0, 900.0),
+            (1920.0, 1080.0),
+            (1024.0, 768.0),
+        ] {
+            let geometry = geometry_for(width, height);
+            assert!(!geometry.stands_on_its_side());
+            let mut view = watching();
+            view.window = geometry.window;
+            view.info_out = 1.0;
+            let pane = view.details_pane(&geometry);
+            let side = view.info_width(&geometry);
+            assert!((pane[0] - (width - geometry.margin - side)).abs() < 0.01);
+            assert_eq!(pane[1], geometry.head);
+            assert_eq!(pane[2], side);
         }
     }
 

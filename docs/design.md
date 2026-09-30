@@ -22,6 +22,11 @@ aside; the details pane takes its room the same way; a dialog or the file
 chooser takes the screen and the film fades out. That is why the stage is
 animated state rather than a rectangle worked out while drawing.
 
+On a window standing on its side there is no room beside the film for the
+details, so there they are a sheet across the foot of the stage instead — as
+wide as the page, each line a caption and its value side by side, rising out
+from behind the transport — and the film steps up rather than aside.
+
 **A playing film is punched through.** It has the whole window, and every panel
 over it is a *hole*: a rounded rectangle the film's pass leaves alone, so what
 the toolkit drew there survives untouched. The panels are still the toolkit's
